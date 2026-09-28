@@ -1,0 +1,32 @@
+#include <stdio.h>
+
+/* Day one at the office.
+   The senior monkey said: start small. */
+
+int main(void)
+{
+    int bananas = 3;
+    int monkeys = 1;
+
+    printf("Hello, world!\n");
+    printf("I am monkey number %d.\n", monkeys);
+
+    while (bananas > 0)
+    {
+        printf("Eating banana... %d left\n", bananas - 1);
+        bananas--;
+    }
+
+    if (bananas == 0)
+    {
+        printf("No bananas. Must write more code.\n");
+    }
+
+    for (int key = 0; key < 26; key++)
+    {
+        putchar('a' + key);
+    }
+    putchar('\n');
+
+    return 0;
+}

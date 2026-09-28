@@ -1,0 +1,85 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 447bdf9cc8b12df49b987aafd49155ab, type: 3}
+  m_Name: Monkey
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Buffs.ActiveBuff
+  id: monkey
+  icon: {fileID: -3037527450722431649, guid: 4dbe276785fd30f4abe29f16b44d2c79, type: 3}
+  iconsByCount: []
+  displayName:
+    key: monkey.hire
+  description:
+    key: monkey.hire
+  tag: monkey
+  sortOrder: 100
+  price:
+    currency: money
+    mode: 0
+    baseCost:
+      m: 1
+      e: 0
+    growth: 1.035
+    formula:
+      expression: 
+    multiplier:
+      expression: monkeyDiscount
+  maxCount: 1000
+  visibility: 2
+  requirements: []
+  condition:
+    expression: 
+  conditionHint:
+    key: 
+  conditionHintArgument:
+    expression: 
+  resetOnRun: 1
+  onBought:
+    blocks: []
+  period:
+    expression: max(2, round(20 * 0.92 ^ (level - 1) * monkeySpeed))
+  onTick:
+    blocks:
+    - rid: 6647298278700351688
+  instanced: 1
+  staggerInstances: 1
+  maxLevel: 20
+  levelUpPrice:
+    currency: money
+    mode: 1
+    baseCost:
+      m: 10
+      e: 0
+    growth: 1.15
+    formula:
+      expression: 3 * 2.6 ^ level * upgradeDiscount
+    multiplier:
+      expression: 
+  levelUpCondition:
+    expression: playerLevel >= level + 1
+  levelUpConditionHint:
+    key: monkey.req.level
+  onLevelUp:
+    blocks: []
+  references:
+    version: 2
+    RefIds:
+    - rid: 6647298278700351688
+      type: {class: CallFunctionBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        function: WriteCode
+        arguments:
+        - name: amount
+          value:
+            expression: round(1.75 ^ (level - 1)) + monkeyBonus
+          scaleWithBatch: 1
+        resultLocal: 

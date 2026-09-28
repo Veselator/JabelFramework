@@ -1,0 +1,158 @@
+-- Tree.hs
+-- The office org chart is, naturally, a tree. Every monkey reports to
+-- another monkey, except the Professor, who reports to the banana.
+
+module Main where
+
+import Data.List (sortOn, intercalate, maximumBy)
+import Data.Ord (comparing, Down (..))
+import qualified Data.Map.Strict as Map
+
+data Role = Intern | Developer | Lead | Manager | Director
+  deriving (Show, Eq, Ord, Enum, Bounded)
+
+data Monkey = Monkey
+  { name    :: String
+  , role    :: Role
+  , level   :: Int
+  , bananas :: Int
+  } deriving (Show, Eq)
+
+data Tree a = Node a [Tree a]
+  deriving (Show)
+
+instance Functor Tree where
+  fmap f (Node x children) = Node (f x) (map (fmap f) children)
+
+instance Foldable Tree where
+  foldr f acc (Node x children) = f x (foldr (\t a -> foldr f a t) acc children)
+
+-- | Number of monkeys in a (sub)tree.
+size :: Tree a -> Int
+size = length
+
+-- | Depth of the org chart.
+depth :: Tree a -> Int
+depth (Node _ []) = 1
+depth (Node _ cs) = 1 + maximum (map depth cs)
+
+-- | Everybody at a given depth (0 = the top).
+atDepth :: Int -> Tree a -> [a]
+atDepth 0 (Node x _) = [x]
+atDepth n (Node _ cs) = concatMap (atDepth (n - 1)) cs
+
+-- | Path from the root to the first node matching the predicate.
+pathTo :: (a -> Bool) -> Tree a -> Maybe [a]
+pathTo p (Node x cs)
+  | p x = Just [x]
+  | otherwise = case [path | Just path <- map (pathTo p) cs] of
+      (path : _) -> Just (x : path)
+      [] -> Nothing
+
+-- | Direct reports of every monkey.
+reports :: Tree Monkey -> Map.Map String [String]
+reports (Node m cs) =
+  Map.unions (Map.singleton (name m) (map (\(Node c _) -> name c) cs) : map reports cs)
+
+-- | Total bananas consumed by each team (a node plus everybody below it).
+teamBananas :: Tree Monkey -> Tree (String, Int)
+teamBananas (Node m cs) =
+  let sub = map teamBananas cs
+      total = bananas m + sum [t | Node (_, t) _ <- sub]
+   in Node (name m, total) sub
+
+-- | Promotes everybody whose level is high enough for the next role.
+promote :: Monkey -> Monkey
+promote m
+  | role m == maxBound = m
+  | level m >= threshold (succ (role m)) = m { role = succ (role m) }
+  | otherwise = m
+  where
+    threshold Intern = 0
+    threshold Developer = 3
+    threshold Lead = 8
+    threshold Manager = 12
+    threshold Director = 18
+
+-- | Monkeys nobody reports to (the ones who actually type).
+leaves :: Tree a -> [a]
+leaves (Node x []) = [x]
+leaves (Node _ cs) = concatMap leaves cs
+
+-- | Largest number of direct reports anywhere in the chart.
+spanOfControl :: Tree a -> Int
+spanOfControl (Node _ []) = 0
+spanOfControl (Node _ cs) = maximum (length cs : map spanOfControl cs)
+
+-- | Removes a monkey (and hands its team to its boss).
+fire :: (a -> Bool) -> Tree a -> Tree a
+fire p (Node x cs) = Node x (concatMap keep cs)
+  where
+    keep child@(Node c grandchildren)
+      | p c = map (fire p) grandchildren
+      | otherwise = [fire p child]
+
+-- | Pretty printer for the org chart.
+render :: (a -> String) -> Tree a -> String
+render showNode = intercalate "\n" . go ""
+  where
+    go indent (Node x cs) =
+      (indent ++ showNode x) : concatMap (go (indent ++ "  ")) cs
+
+describe :: Monkey -> String
+describe m = name m ++ " (" ++ show (role m) ++ ", lvl " ++ show (level m) ++ ")"
+
+office :: Tree Monkey
+office =
+  Node (Monkey "Professor" Director 19 12)
+    [ Node (Monkey "Momo" Manager 13 8)
+        [ Node (Monkey "Bobo" Lead 9 6)
+            [ Node (Monkey "Koko" Intern 1 3) []
+            , Node (Monkey "Chip" Developer 4 5) []
+            ]
+        , Node (Monkey "Dale" Developer 7 4) []
+        ]
+    , Node (Monkey "Zazu" Lead 8 7)
+        [ Node (Monkey "Tiki" Intern 2 2) []
+        , Node (Monkey "Lulu" Developer 5 6)
+            [ Node (Monkey "Pip" Intern 0 1) [] ]
+        ]
+    ]
+
+main :: IO ()
+main = do
+  putStrLn "Org chart:"
+  putStrLn (render describe office)
+  putStrLn ""
+  putStrLn ("Monkeys: " ++ show (size office) ++ ", depth: " ++ show (depth office))
+
+  let hungriest = maximumBy (comparing bananas) (foldr (:) [] office)
+  putStrLn ("Hungriest monkey: " ++ name hungriest)
+
+  putStrLn "Second level:"
+  mapM_ (putStrLn . ("  " ++) . describe) (atDepth 1 office)
+
+  case pathTo ((== "Pip") . name) office of
+    Just path -> putStrLn ("Chain of command for Pip: " ++ intercalate " -> " (map name path))
+    Nothing -> putStrLn "Pip is not in the office"
+
+  putStrLn "Team banana budgets:"
+  putStrLn (render (\(n, b) -> n ++ ": " ++ show b) (teamBananas office))
+
+  let promoted = fmap promote office
+      changes = [ (name a, role a, role b)
+                | (a, b) <- zip (foldr (:) [] office) (foldr (:) [] promoted)
+                , role a /= role b ]
+  putStrLn "Promotions:"
+  mapM_ (\(n, from, to) -> putStrLn ("  " ++ n ++ ": " ++ show from ++ " -> " ++ show to)) changes
+
+  putStrLn ("Typists: " ++ intercalate ", " (map name (leaves office)))
+  putStrLn ("Widest span of control: " ++ show (spanOfControl office))
+
+  let reorganised = fire ((== "Bobo") . name) office
+  putStrLn "After Bobo left for a banana farm:"
+  putStrLn (render describe reorganised)
+
+  putStrLn "Direct reports:"
+  mapM_ (\(boss, team) -> putStrLn ("  " ++ boss ++ ": " ++ intercalate ", " team))
+    (sortOn (Down . length . snd) (Map.toList (reports office)))

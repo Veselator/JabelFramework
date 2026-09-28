@@ -1,0 +1,165 @@
+// RenderMonkey.hlsl
+// A stylised fur shader for the monkeys on the office screensaver.
+// Shell-based fur, rim light from the monitor glow and a banana tint
+// that grows stronger the more bananas the monkey has eaten today.
+
+#ifndef RENDER_MONKEY_INCLUDED
+#define RENDER_MONKEY_INCLUDED
+
+cbuffer MonkeyConstants : register(b0)
+{
+    float4x4 _ObjectToWorld;
+    float4x4 _WorldToClip;
+    float3   _CameraPosition;
+    float    _Time;
+
+    float3   _FurColor;
+    float    _FurLength;
+    float3   _TipColor;
+    float    _ShellIndex;       // 0..1, which fur shell is being drawn
+    float3   _MonitorGlow;      // colour of the screen in front of the monkey
+    float    _GlowStrength;
+    float    _BananasEaten;     // 0..12
+    float    _Wind;
+    float2   _Padding;
+};
+
+Texture2D    _NoiseTex   : register(t0);
+Texture2D    _AlbedoTex  : register(t1);
+SamplerState _LinearWrap : register(s0);
+
+struct VertexInput
+{
+    float3 position : POSITION;
+    float3 normal   : NORMAL;
+    float2 uv       : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 clip      : SV_POSITION;
+    float3 world     : TEXCOORD0;
+    float3 normal    : TEXCOORD1;
+    float2 uv        : TEXCOORD2;
+    float  shell     : TEXCOORD3;
+};
+
+// ------------------------------------------------------------------ helpers
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(233.34, 851.73));
+    p += dot(p, p + 23.45);
+    return frac(p.x * p.y);
+}
+
+float3 bananaTint(float3 color, float bananas)
+{
+    // More bananas, more golden glow. Scientifically accurate.
+    float amount = saturate(bananas / 12.0) * 0.35;
+    return lerp(color, color * float3(1.25, 1.1, 0.6), amount);
+}
+
+float3 windOffset(float3 world, float shell)
+{
+    float wave = sin(world.x * 3.0 + _Time * 2.0) * 0.5 + sin(world.z * 5.0 + _Time * 3.1) * 0.5;
+    return float3(wave, 0.0, wave * 0.5) * _Wind * shell * shell * 0.02;
+}
+
+// ------------------------------------------------------------------ vertex
+
+VertexOutput VertMain(VertexInput input)
+{
+    VertexOutput output;
+
+    float shell = _ShellIndex;
+    float3 world = mul(_ObjectToWorld, float4(input.position, 1.0)).xyz;
+    float3 normal = normalize(mul((float3x3)_ObjectToWorld, input.normal));
+
+    // Push every shell outwards along the normal, gravity pulls the tips down.
+    world += normal * _FurLength * shell;
+    world.y -= shell * shell * _FurLength * 0.3;
+    world += windOffset(world, shell);
+
+    output.world = world;
+    output.normal = normal;
+    output.uv = input.uv;
+    output.shell = shell;
+    output.clip = mul(_WorldToClip, float4(world, 1.0));
+    return output;
+}
+
+// ------------------------------------------------------------------ fragment
+
+float4 FragMain(VertexOutput input) : SV_Target
+{
+    float2 strandUv = input.uv * 180.0;
+    float strand = hash21(floor(strandUv));
+    float noise = _NoiseTex.Sample(_LinearWrap, input.uv * 4.0).r;
+
+    // Strands get thinner towards the tip; discard the gaps between them.
+    float2 local = frac(strandUv) * 2.0 - 1.0;
+    float thickness = (1.0 - input.shell) * (0.6 + strand * 0.4);
+    if (input.shell > 0.0 && length(local) > thickness)
+    {
+        discard;
+    }
+
+    float3 albedo = _AlbedoTex.Sample(_LinearWrap, input.uv).rgb * _FurColor;
+    albedo = lerp(albedo, _TipColor, input.shell * input.shell);
+    albedo = bananaTint(albedo, _BananasEaten);
+
+    float3 view = normalize(_CameraPosition - input.world);
+    float3 normal = normalize(input.normal);
+
+    // Soft wrap lighting from above.
+    float3 lightDir = normalize(float3(0.3, 1.0, 0.2));
+    float wrap = saturate((dot(normal, lightDir) + 0.5) / 1.5);
+
+    // Rim light: the monitor glow outlines the fur.
+    float rim = pow(1.0 - saturate(dot(normal, view)), 3.0);
+    float3 glow = _MonitorGlow * rim * _GlowStrength;
+
+    // Fake self-shadowing: inner shells are darker.
+    float occlusion = lerp(0.35, 1.0, input.shell);
+
+    float3 color = albedo * wrap * occlusion + glow;
+    color *= 0.9 + noise * 0.2;
+
+    return float4(color, 1.0);
+}
+
+// ------------------------------------------------------------------ shadow pass
+
+float4 ShadowFrag(VertexOutput input) : SV_Target
+{
+    // Only the base shell casts shadows; fur tips would be too noisy.
+    if (input.shell > 0.05)
+    {
+        discard;
+    }
+    return 0;
+}
+
+// ------------------------------------------------------------------ debug views
+
+float4 DebugShells(VertexOutput input) : SV_Target
+{
+    float3 colors[4] =
+    {
+        float3(1.0, 0.2, 0.2),
+        float3(1.0, 0.9, 0.2),
+        float3(0.2, 1.0, 0.4),
+        float3(0.2, 0.6, 1.0)
+    };
+    int band = min(3, (int)(input.shell * 4.0));
+    return float4(colors[band], 1.0);
+}
+
+float4 DebugBananas(VertexOutput input) : SV_Target
+{
+    float amount = saturate(_BananasEaten / 12.0);
+    return float4(amount, amount * 0.9, 0.1, 1.0);
+}
+
+#endif // RENDER_MONKEY_INCLUDED

@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b74d082be24096948aebc1cc0f35b9e5, type: 3}
+  m_Name: LuckyFinger
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Buffs.PassiveBuff
+  id: lucky_finger
+  icon: {fileID: 0}
+  displayName:
+    key: tpl.buff.lucky.name
+  description:
+    key: tpl.buff.lucky.desc
+  tag: click
+  sortOrder: 2
+  price:
+    currency: money
+    mode: 0
+    baseCost:
+      m: 100
+      e: 0
+    growth: 3
+    formula:
+      expression: 
+    multiplier:
+      expression: 
+  maxCount: 5
+  visibility: 1
+  requirements:
+  - variable: clicks
+    minimum:
+      m: 25
+      e: 0
+  condition:
+    expression: 
+  conditionHint:
+    key: 
+  resetOnRun: 1
+  onBought:
+    blocks: []
+  references:
+    version: 2
+    RefIds: []

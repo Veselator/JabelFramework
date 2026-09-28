@@ -1,0 +1,156 @@
+package office.stats
+
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
+
+/**
+ * Collects keystrokes from every monkey and turns them into
+ * words-per-minute charts for the weekly all-hands meeting.
+ */
+data class Keystroke(val monkey: String, val char: Char, val timestampMs: Long)
+
+data class MonkeyStats(
+    val monkey: String,
+    val keystrokes: Int,
+    val words: Int,
+    val wpm: Double,
+    val accuracy: Double,
+    val favouriteKey: Char?
+)
+
+enum class Mood(val emoji: String) {
+    FOCUSED("(o_o)"),
+    SLEEPY("(-_-)"),
+    HUNGRY("(>_<)"),
+    INSPIRED("(^o^)")
+}
+
+class TypingStats(private val dictionary: Set<String>) {
+
+    private val strokes = mutableMapOf<String, MutableList<Keystroke>>()
+
+    fun record(stroke: Keystroke) {
+        strokes.getOrPut(stroke.monkey) { mutableListOf() }.add(stroke)
+    }
+
+    fun recordAll(monkey: String, text: String, startMs: Long, intervalMs: Long) {
+        text.forEachIndexed { index, c ->
+            record(Keystroke(monkey, c, startMs + index * intervalMs))
+        }
+    }
+
+    private fun textOf(monkey: String): String =
+        strokes[monkey].orEmpty().joinToString(separator = "") { it.char.toString() }
+
+    private fun wordsOf(monkey: String): List<String> =
+        textOf(monkey)
+            .split(' ', '\n', '\t', '.', ',', '!', '?')
+            .map { it.lowercase() }
+            .filter { it.isNotBlank() }
+
+    fun statsFor(monkey: String): MonkeyStats? {
+        val list = strokes[monkey] ?: return null
+        if (list.isEmpty()) return null
+
+        val words = wordsOf(monkey)
+        val durationMinutes = max(1L, list.last().timestampMs - list.first().timestampMs) / 60_000.0
+        val realWords = words.count { it in dictionary }
+        val accuracy = if (words.isEmpty()) 0.0 else realWords.toDouble() / words.size
+        val favourite = list
+            .filter { it.char.isLetter() }
+            .groupingBy { it.char.lowercaseChar() }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+
+        return MonkeyStats(
+            monkey = monkey,
+            keystrokes = list.size,
+            words = words.size,
+            wpm = words.size / durationMinutes,
+            accuracy = accuracy,
+            favouriteKey = favourite
+        )
+    }
+
+    fun leaderboard(limit: Int = 10): List<MonkeyStats> =
+        strokes.keys
+            .mapNotNull { statsFor(it) }
+            .sortedWith(compareByDescending<MonkeyStats> { it.accuracy }.thenByDescending { it.wpm })
+            .take(limit)
+
+    fun moodOf(monkey: String): Mood {
+        val stats = statsFor(monkey) ?: return Mood.SLEEPY
+        return when {
+            stats.accuracy > 0.6 -> Mood.INSPIRED
+            stats.wpm > 40 -> Mood.FOCUSED
+            stats.keystrokes < 50 -> Mood.SLEEPY
+            else -> Mood.HUNGRY
+        }
+    }
+
+    /** Standard deviation of words per minute across the whole office. */
+    fun wpmSpread(): Double {
+        val values = strokes.keys.mapNotNull { statsFor(it)?.wpm }
+        if (values.size < 2) return 0.0
+        val mean = values.average()
+        val variance = values.sumOf { (it - mean) * (it - mean) } / (values.size - 1)
+        return sqrt(variance)
+    }
+
+    /** ASCII bar chart for the all-hands slides. */
+    fun chart(width: Int = 30): String {
+        val board = leaderboard()
+        if (board.isEmpty()) return "(no data yet)"
+        val best = board.maxOf { it.wpm }.coerceAtLeast(1.0)
+        return buildString {
+            for (row in board) {
+                val bar = (row.wpm / best * width).roundToInt()
+                append(row.monkey.padEnd(12))
+                append('|')
+                append("#".repeat(bar))
+                append(" ".repeat(width - bar))
+                append("| ")
+                append("%.1f wpm".format(row.wpm))
+                append(", ")
+                append("%.0f%%".format(row.accuracy * 100))
+                append(' ')
+                append(moodOf(row.monkey).emoji)
+                appendLine()
+            }
+        }
+    }
+
+    /** Finds the longest real word every monkey managed to type by accident. */
+    fun longestRealWord(monkey: String): String? =
+        wordsOf(monkey).filter { it in dictionary }.maxByOrNull { it.length }
+
+    fun reset(monkey: String? = null) {
+        if (monkey == null) strokes.clear() else strokes.remove(monkey)
+    }
+}
+
+fun clampPercent(value: Double): Int = min(100, max(0, (value * 100).roundToInt()))
+
+fun main() {
+    val dictionary = setOf("war", "and", "peace", "banana", "code", "the", "monkey", "type", "a", "to", "be")
+    val stats = TypingStats(dictionary)
+
+    stats.recordAll("Bobo", "the banana war and a monkey peace", 0, 180)
+    stats.recordAll("Koko", "asdf jkl banana qwerty", 0, 400)
+    stats.recordAll("Momo", "to be or not to be code code code", 0, 150)
+    stats.recordAll("Professor", "war and peace and war and peace", 0, 120)
+
+    println(stats.chart())
+    println("spread: %.2f".format(stats.wpmSpread()))
+    for (name in listOf("Bobo", "Koko", "Momo", "Professor")) {
+        val word = stats.longestRealWord(name) ?: "-"
+        println("$name longest word: $word, mood ${stats.moodOf(name)}")
+    }
+    val best = stats.leaderboard(1).firstOrNull()
+    if (best != null) {
+        println("Accuracy champion: ${best.monkey} (${clampPercent(best.accuracy)}%)")
+    }
+}

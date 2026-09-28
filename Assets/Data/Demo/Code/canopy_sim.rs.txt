@@ -1,0 +1,188 @@
+//! canopy_sim.rs
+//! A cellular automaton of the jungle canopy outside the office window.
+//! Trees grow, bananas ripen, monkeys wander and occasionally a storm
+//! knocks everything down. Used as a screensaver on idle monitors.
+
+use std::fmt;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Cell {
+    Empty,
+    Sapling(u8),
+    Tree { bananas: u8 },
+    Monkey { hunger: u8 },
+}
+
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        // xorshift64*
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+
+    fn chance(&mut self, percent: u64) -> bool {
+        self.next() % 100 < percent
+    }
+}
+
+struct Canopy {
+    width: usize,
+    height: usize,
+    cells: Vec<Cell>,
+    rng: Rng,
+    generation: u32,
+    bananas_eaten: u32,
+}
+
+impl Canopy {
+    fn new(width: usize, height: usize, seed: u64) -> Self {
+        let mut canopy = Canopy {
+            width,
+            height,
+            cells: vec![Cell::Empty; width * height],
+            rng: Rng(seed | 1),
+            generation: 0,
+            bananas_eaten: 0,
+        };
+        for i in 0..canopy.cells.len() {
+            canopy.cells[i] = match canopy.rng.next() % 10 {
+                0 | 1 => Cell::Tree { bananas: 1 },
+                2 => Cell::Sapling(0),
+                3 => Cell::Monkey { hunger: 0 },
+                _ => Cell::Empty,
+            };
+        }
+        canopy
+    }
+
+    fn index(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
+    }
+
+    fn neighbours(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
+        let mut result = Vec::with_capacity(8);
+        for dy in [-1i32, 0, 1] {
+            for dx in [-1i32, 0, 1] {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let nx = (x as i32 + dx).rem_euclid(self.width as i32) as usize;
+                let ny = (y as i32 + dy).rem_euclid(self.height as i32) as usize;
+                result.push((nx, ny));
+            }
+        }
+        result
+    }
+
+    fn count<F: Fn(&Cell) -> bool>(&self, x: usize, y: usize, predicate: F) -> usize {
+        self.neighbours(x, y)
+            .into_iter()
+            .filter(|&(nx, ny)| predicate(&self.cells[self.index(nx, ny)]))
+            .count()
+    }
+
+    fn step(&mut self) {
+        let mut next = self.cells.clone();
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let i = self.index(x, y);
+                next[i] = match self.cells[i] {
+                    Cell::Empty => {
+                        let trees = self.count(x, y, |c| matches!(c, Cell::Tree { .. }));
+                        if trees >= 2 && self.rng.chance(10) { Cell::Sapling(0) } else { Cell::Empty }
+                    }
+                    Cell::Sapling(age) if age >= 5 => Cell::Tree { bananas: 0 },
+                    Cell::Sapling(age) => Cell::Sapling(age + 1),
+                    Cell::Tree { bananas } => {
+                        let grown = if self.rng.chance(30) { bananas.saturating_add(1).min(9) } else { bananas };
+                        let monkeys = self.count(x, y, |c| matches!(c, Cell::Monkey { .. })) as u8;
+                        let eaten = monkeys.min(grown);
+                        self.bananas_eaten += eaten as u32;
+                        Cell::Tree { bananas: grown - eaten }
+                    }
+                    Cell::Monkey { hunger } => {
+                        let food = self.count(x, y, |c| matches!(c, Cell::Tree { bananas } if *bananas > 0));
+                        if food > 0 {
+                            Cell::Monkey { hunger: hunger.saturating_sub(2) }
+                        } else if hunger >= 8 {
+                            // Hungry monkeys leave for the office kitchen.
+                            Cell::Empty
+                        } else {
+                            Cell::Monkey { hunger: hunger + 1 }
+                        }
+                    }
+                };
+            }
+        }
+        self.cells = next;
+        self.generation += 1;
+        if self.rng.chance(2) {
+            self.storm();
+        }
+    }
+
+    fn storm(&mut self) {
+        for cell in self.cells.iter_mut() {
+            if let Cell::Tree { .. } = cell {
+                if self.rng.chance(20) {
+                    *cell = Cell::Sapling(0);
+                }
+            }
+        }
+    }
+
+    fn census(&self) -> (usize, usize, usize, u32) {
+        let mut trees = 0;
+        let mut monkeys = 0;
+        let mut bananas = 0u32;
+        let mut saplings = 0;
+        for cell in &self.cells {
+            match cell {
+                Cell::Tree { bananas: b } => {
+                    trees += 1;
+                    bananas += *b as u32;
+                }
+                Cell::Monkey { .. } => monkeys += 1,
+                Cell::Sapling(_) => saplings += 1,
+                Cell::Empty => {}
+            }
+        }
+        (trees, saplings, monkeys, bananas)
+    }
+}
+
+impl fmt::Display for Canopy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let symbol = match self.cells[self.index(x, y)] {
+                    Cell::Empty => '.',
+                    Cell::Sapling(_) => ',',
+                    Cell::Tree { bananas: 0 } => 't',
+                    Cell::Tree { .. } => 'T',
+                    Cell::Monkey { .. } => 'm',
+                };
+                write!(f, "{}", symbol)?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
+fn main() {
+    let mut canopy = Canopy::new(40, 12, 1000);
+    for _ in 0..50 {
+        canopy.step();
+    }
+    let (trees, saplings, monkeys, bananas) = canopy.census();
+    println!("{}", canopy);
+    println!(
+        "generation {}: {} trees, {} saplings, {} monkeys, {} bananas on trees, {} eaten",
+        canopy.generation, trees, saplings, monkeys, bananas, canopy.bananas_eaten
+    );
+}

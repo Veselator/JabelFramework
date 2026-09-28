@@ -1,0 +1,170 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace Office.Ai
+{
+    /// <summary>
+    /// A tiny utility AI that decides what a monkey does next.
+    /// Every option scores itself; the best score wins, ties go to typing.
+    /// </summary>
+    public sealed class MonkeyBrain
+    {
+        public float Hunger { get; private set; }
+        public float Energy { get; private set; } = 1f;
+        public float Boredom { get; private set; }
+        public float Inspiration { get; private set; }
+        public int LinesToday { get; private set; }
+
+        private readonly Random _random;
+        private readonly List<IAction> _actions;
+        private readonly Queue<string> _journal = new Queue<string>();
+
+        public MonkeyBrain(int seed)
+        {
+            _random = new Random(seed);
+            _actions = new List<IAction>
+            {
+                new TypeCode(),
+                new EatBanana(),
+                new Nap(),
+                new StareOutOfWindow(),
+                new AskColleague()
+            };
+        }
+
+        public interface IAction
+        {
+            string Name { get; }
+            float Score(MonkeyBrain brain);
+            void Execute(MonkeyBrain brain);
+        }
+
+        private sealed class TypeCode : IAction
+        {
+            public string Name => "type";
+
+            public float Score(MonkeyBrain b) =>
+                b.Energy * 0.8f + b.Inspiration * 0.6f - b.Hunger * 0.5f - b.Boredom * 0.3f;
+
+            public void Execute(MonkeyBrain b)
+            {
+                int lines = 1 + (int)(b.Inspiration * 10) + b._random.Next(0, 3);
+                b.LinesToday += lines;
+                b.Energy = Clamp(b.Energy - 0.08f);
+                b.Hunger = Clamp(b.Hunger + 0.05f);
+                b.Boredom = Clamp(b.Boredom + 0.04f);
+                b.Inspiration = Clamp(b.Inspiration - 0.05f);
+                b.Log($"typed {lines} lines");
+            }
+        }
+
+        private sealed class EatBanana : IAction
+        {
+            public string Name => "eat";
+            public float Score(MonkeyBrain b) => b.Hunger * 1.2f;
+
+            public void Execute(MonkeyBrain b)
+            {
+                b.Hunger = Clamp(b.Hunger - 0.6f);
+                b.Energy = Clamp(b.Energy + 0.1f);
+                b.Log("ate a banana");
+            }
+        }
+
+        private sealed class Nap : IAction
+        {
+            public string Name => "nap";
+            public float Score(MonkeyBrain b) => (1f - b.Energy) * 1.1f - 0.2f;
+
+            public void Execute(MonkeyBrain b)
+            {
+                b.Energy = Clamp(b.Energy + 0.5f);
+                b.Hunger = Clamp(b.Hunger + 0.1f);
+                b.Log("took a nap under the desk");
+            }
+        }
+
+        private sealed class StareOutOfWindow : IAction
+        {
+            public string Name => "stare";
+            public float Score(MonkeyBrain b) => b.Boredom * 0.9f;
+
+            public void Execute(MonkeyBrain b)
+            {
+                b.Boredom = Clamp(b.Boredom - 0.4f);
+                b.Inspiration = Clamp(b.Inspiration + (float)b._random.NextDouble() * 0.5f);
+                b.Log("stared out of the window and got an idea");
+            }
+        }
+
+        private sealed class AskColleague : IAction
+        {
+            public string Name => "ask";
+            public float Score(MonkeyBrain b) => b.Inspiration < 0.1f ? 0.5f : 0.1f;
+
+            public void Execute(MonkeyBrain b)
+            {
+                b.Inspiration = Clamp(b.Inspiration + 0.25f);
+                b.Boredom = Clamp(b.Boredom - 0.1f);
+                b.Log("asked the monkey next door for help");
+            }
+        }
+
+        private static float Clamp(float value) => Math.Max(0f, Math.Min(1f, value));
+
+        private void Log(string entry)
+        {
+            _journal.Enqueue(entry);
+            while (_journal.Count > 20) _journal.Dequeue();
+        }
+
+        /// <summary>Chooses and performs one action. Returns its name.</summary>
+        public string Think()
+        {
+            var ranked = _actions
+                .Select(a => (action: a, score: a.Score(this) + (float)_random.NextDouble() * 0.05f))
+                .OrderByDescending(x => x.score)
+                .ThenBy(x => x.action.Name == "type" ? 0 : 1)
+                .ToList();
+
+            var best = ranked[0].action;
+            best.Execute(this);
+            return best.Name;
+        }
+
+        public IEnumerable<string> Journal => _journal;
+    }
+
+    public static class Simulation
+    {
+        public static Dictionary<string, int> RunDay(MonkeyBrain brain, int steps)
+        {
+            var counts = new Dictionary<string, int>();
+            for (int i = 0; i < steps; i++)
+            {
+                string action = brain.Think();
+                counts[action] = counts.TryGetValue(action, out int n) ? n + 1 : 1;
+            }
+            return counts;
+        }
+
+        public static void Main()
+        {
+            var brains = Enumerable.Range(1, 5).Select(seed => new MonkeyBrain(seed)).ToList();
+            int office = 0;
+
+            foreach (var brain in brains)
+            {
+                var counts = RunDay(brain, 96);
+                office += brain.LinesToday;
+                Console.WriteLine($"Monkey wrote {brain.LinesToday} lines");
+                foreach (var pair in counts.OrderByDescending(p => p.Value))
+                    Console.WriteLine($"  {pair.Key,-6} x{pair.Value}");
+                Console.WriteLine("  last thoughts: " + string.Join("; ", brain.Journal.TakeLast(3)));
+            }
+
+            Console.WriteLine($"Office total: {office} lines");
+        }
+    }
+}

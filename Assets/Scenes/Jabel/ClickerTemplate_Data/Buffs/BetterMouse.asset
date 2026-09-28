@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b74d082be24096948aebc1cc0f35b9e5, type: 3}
+  m_Name: BetterMouse
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Buffs.PassiveBuff
+  id: better_mouse
+  icon: {fileID: 0}
+  displayName:
+    key: tpl.buff.mouse.name
+  description:
+    key: tpl.buff.mouse.desc
+  tag: click
+  sortOrder: 0
+  price:
+    currency: money
+    mode: 0
+    baseCost:
+      m: 10
+      e: 0
+    growth: 1.5
+    formula:
+      expression: 
+    multiplier:
+      expression: 
+  maxCount: 25
+  visibility: 0
+  requirements: []
+  condition:
+    expression: 
+  conditionHint:
+    key: 
+  resetOnRun: 1
+  onBought:
+    blocks: []
+  references:
+    version: 2
+    RefIds: []

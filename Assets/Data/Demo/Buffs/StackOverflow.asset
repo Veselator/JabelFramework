@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b74d082be24096948aebc1cc0f35b9e5, type: 3}
+  m_Name: StackOverflow
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Buffs.PassiveBuff
+  id: stack_overflow
+  icon: {fileID: 8543944993207384569, guid: 4dbe276785fd30f4abe29f16b44d2c79, type: 3}
+  iconsByCount: []
+  displayName:
+    key: up.stack.name
+  description:
+    key: up.stack.desc
+  tag: upgrade
+  sortOrder: 1
+  price:
+    currency: money
+    mode: 0
+    baseCost:
+      m: 25
+      e: 0
+    growth: 4
+    formula:
+      expression: 
+    multiplier:
+      expression: 
+  maxCount: 8
+  visibility: 0
+  requirements:
+  - variable: playerLevel
+    minimum:
+      m: 2
+      e: 0
+  condition:
+    expression: 
+  conditionHint:
+    key: 
+  conditionHintArgument:
+    expression: 
+  resetOnRun: 1
+  onBought:
+    blocks: []
+  references:
+    version: 2
+    RefIds: []

@@ -1,0 +1,199 @@
+// Package jungle implements the HTTP router that serves the office intranet.
+// Monkeys use it to order bananas, book meeting trees and report bugs.
+package jungle
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Order is a banana delivery request.
+type Order struct {
+	ID        int       `json:"id"`
+	Monkey    string    `json:"monkey"`
+	Bananas   int       `json:"bananas"`
+	Desk      int       `json:"desk"`
+	CreatedAt time.Time `json:"created_at"`
+	Delivered bool      `json:"delivered"`
+}
+
+// Store keeps orders in memory. It is safe for concurrent use.
+type Store struct {
+	mu     sync.RWMutex
+	nextID int
+	orders map[int]*Order
+}
+
+// NewStore creates an empty order store.
+func NewStore() *Store {
+	return &Store{nextID: 1, orders: make(map[int]*Order)}
+}
+
+var errNotFound = errors.New("order not found")
+var errTooHungry = errors.New("no monkey needs more than twelve bananas")
+
+// Add validates and stores a new order.
+func (s *Store) Add(monkey string, bananas, desk int) (*Order, error) {
+	if bananas <= 0 || bananas > 12 {
+		return nil, errTooHungry
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order := &Order{
+		ID:        s.nextID,
+		Monkey:    strings.TrimSpace(monkey),
+		Bananas:   bananas,
+		Desk:      desk,
+		CreatedAt: time.Now(),
+	}
+	s.orders[order.ID] = order
+	s.nextID++
+	return order, nil
+}
+
+// Deliver marks an order as delivered.
+func (s *Store) Deliver(id int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order, ok := s.orders[id]
+	if !ok {
+		return errNotFound
+	}
+	order.Delivered = true
+	return nil
+}
+
+// Pending returns undelivered orders, oldest first.
+func (s *Store) Pending() []Order {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]Order, 0, len(s.orders))
+	for _, o := range s.orders {
+		if !o.Delivered {
+			result = append(result, *o)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.Before(result[j].CreatedAt)
+	})
+	return result
+}
+
+// Router wires HTTP handlers to the store.
+type Router struct {
+	store *Store
+	mux   *http.ServeMux
+}
+
+// NewRouter builds the intranet routes.
+func NewRouter(store *Store) *Router {
+	r := &Router{store: store, mux: http.NewServeMux()}
+	r.mux.HandleFunc("/orders", r.handleOrders)
+	r.mux.HandleFunc("/orders/deliver/", r.handleDeliver)
+	r.mux.HandleFunc("/health", r.handleHealth)
+	return r
+}
+
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	start := time.Now()
+	r.mux.ServeHTTP(w, req)
+	log.Printf("%s %s (%s)", req.Method, req.URL.Path, time.Since(start))
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		log.Printf("encode: %v", err)
+	}
+}
+
+type orderRequest struct {
+	Monkey  string `json:"monkey"`
+	Bananas int    `json:"bananas"`
+	Desk    int    `json:"desk"`
+}
+
+func (r *Router) handleOrders(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, r.store.Pending())
+	case http.MethodPost:
+		var body orderRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad json"})
+			return
+		}
+		order, err := r.store.Add(body.Monkey, body.Bananas, body.Desk)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusCreated, order)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (r *Router) handleDeliver(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	idText := strings.TrimPrefix(req.URL.Path, "/orders/deliver/")
+	id, err := strconv.Atoi(idText)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id must be a number"})
+		return
+	}
+	if err := r.store.Deliver(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "delivered": true})
+}
+
+func (r *Router) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	pending := len(r.store.Pending())
+	status := "ok"
+	if pending > 100 {
+		status = "hungry"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  status,
+		"pending": pending,
+		"time":    time.Now().Format(time.RFC3339),
+	})
+}
+
+// Summary returns a human readable report for the office dashboard.
+func Summary(store *Store) string {
+	pending := store.Pending()
+	total := 0
+	for _, o := range pending {
+		total += o.Bananas
+	}
+	return fmt.Sprintf("%d orders waiting, %d bananas to deliver", len(pending), total)
+}
+
+// Run starts the intranet server.
+func Run(addr string) error {
+	store := NewStore()
+	router := NewRouter(store)
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+	log.Printf("jungle intranet listening on %s", addr)
+	return server.ListenAndServe()
+}

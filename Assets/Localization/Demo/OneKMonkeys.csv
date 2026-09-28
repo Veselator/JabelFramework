@@ -1,0 +1,107 @@
+key,en,ru
+// ---------------------------------------------------------------- HUD
+jabel.price.money,${0},${0}
+hud.money,${0},${0}
+hud.plusMoney,+${0},+${0}
+hud.level,Level {0},Уровень {0}
+hud.lines,Lines {0} / {1},Строки {0} / {1}
+hud.monkeys,{0} / {1},{0} / {1}
+hud.upgrades,Upgrades,Улучшения
+hud.back,Back,Назад
+hud.clickHint,Click the monitor to write code!,Кликайте по монитору — пишите код!
+hud.startHint,Click your computer to start coding,Кликните по своему компьютеру
+hud.perClick,+{0} chars per click,+{0} симв. за клик
+hud.totals,Written: {0} chars · {1} lines,Написано: {0} симв. · {1} строк
+hud.you,YOU,ВЫ
+// ---------------------------------------------------------------- Variables
+var.money,Money,Деньги
+var.playerLevel,Level,Уровень
+var.totalChars,Characters written,Символов написано
+var.totalLines,Lines written,Строк написано
+// ---------------------------------------------------------------- Notifications
+notify.welcome,Welcome to the office! Click your computer to start writing code.,Добро пожаловать в офис! Кликните по компьютеру и пишите код.
+notify.levelup,Level {0}! Bonus +${1},Уровень {0}! Бонус +${1}
+notify.critical,Critical click! x10,Критический клик! x10
+notify.fileDone,File complete! Next one...,Файл готов! Следующий...
+// ---------------------------------------------------------------- Monkeys
+monkey.hire,Hire monkey,Нанять
+monkey.chars,+{0},+{0}
+monkey.panel.title,Monkey #{0} · {1},Обезьяна №{0} · {1}
+monkey.panel.level,Level {0} / {1},Уровень {0} / {1}
+monkey.panel.output,Writes {0} chars every {1} s,Пишет {0} симв. каждые {1} с
+monkey.panel.next,Next: {0} — {1},Далее: {0} — {1}
+monkey.panel.upgrade,Upgrade {0},Улучшить {0}
+monkey.req.level,Requires player level {0},Нужен уровень игрока {0}
+monkey.tooltip.click,Click the monkey to upgrade,Кликните по обезьяне для улучшения
+monkey.tooltip.noMoney,Not enough money,Не хватает денег
+monkey.tooltip.maxed,Maximum level reached!,Достигнут максимальный уровень!
+monkey.level.1,Intern,Стажёр
+monkey.level.2,Junior,Джуниор
+monkey.level.3,Middle,Мидл
+monkey.level.4,Senior,Сеньор
+monkey.level.5,Team Lead,Тимлид
+monkey.level.6,Architect,Архитектор
+monkey.level.7,Hacker,Хакер
+monkey.level.8,Rockstar,Рок-звезда
+monkey.level.9,Ninja,Ниндзя
+monkey.level.10,10x Engineer,10x-инженер
+monkey.level.11,Glitch Wizard,Маг глитчей
+monkey.level.12,Code Monk,Монах кода
+monkey.level.13,Cyborg,Киборг
+monkey.level.14,Legend,Легенда
+monkey.level.15,Phantom,Фантом
+monkey.level.16,Cosmic,Космический
+monkey.level.17,Quantum,Квантовый
+monkey.level.18,Titan,Титан
+monkey.level.19,Demigod,Полубог
+monkey.level.20,Leo Tolstoy,Лев Толстой
+fx.None,no effect,без эффекта
+fx.Outline,Outline,Контур
+fx.Glow,Glow,Свечение
+fx.Shine,Shine,Блик
+fx.Pulse,Pulse,Пульсация
+fx.Wobble,Wobble,Желе
+fx.Hologram,Hologram,Голограмма
+fx.Rainbow,Rainbow,Радуга
+fx.Sparkles,Sparkles,Искры
+fx.Gold,Gold,Золото
+fx.Glitch,Glitch,Глитч
+fx.Chromatic,Chromatic,Хроматика
+fx.Electric,Electric,Электричество
+fx.Fire,Fire,Огонь
+fx.Ghost,Ghost,Призрак
+fx.Galaxy,Galaxy,Галактика
+fx.Dissolve,Dissolve,Растворение
+fx.RainbowOutline,Rainbow outline,Радужный контур
+fx.Halo,Halo,Нимб
+fx.InnerGlow,Inner glow,Внутреннее свечение
+// ---------------------------------------------------------------- Upgrades
+up.keyboard.name,Mechanical Keyboard,Механическая клавиатура
+up.keyboard.desc,+1 character per click,+1 символ за клик
+up.stack.name,Stack Overflow Tab,Вкладка Stack Overflow
+up.stack.desc,+50% money per character,+50% денег за символ
+up.bananas.name,Premium Bananas,Премиальные бананы
+up.bananas.desc,Monkeys type 10% faster,Обезьяны печатают на 10% быстрее
+up.typewriter.name,Old Typewriter,Старая печатная машинка
+up.typewriter.desc,Types 1 character per second for you,Печатает за вас 1 символ в секунду
+up.bigscreen.name,Big Screen,Большой экран
+up.bigscreen.desc,A giant monitor on the office wall: write code without leaving the main screen,Огромный монитор на стене офиса: пишите код прямо с главного экрана
+up.duck.name,Rubber Duck,Резиновая уточка
+up.duck.desc,+5% chance of a x10 critical click,+5% шанс критического клика x10
+up.coffee.name,Double Espresso,Двойной эспрессо
+up.coffee.desc,Clicks write twice as much,Клики пишут в два раза больше
+up.review.name,Code Review,Код-ревью
+up.review.desc,Level-up bonus x2,Бонус за уровень x2
+up.autocomplete.name,Autocomplete,Автодополнение
+up.autocomplete.desc,Every monkey writes +1 character per burst,Каждая обезьяна пишет на 1 символ больше
+up.openspace.name,Open Space,Опенспейс
+up.openspace.desc,Hiring monkeys is 10% cheaper,Найм обезьян дешевле на 10%
+up.mentor.name,Mentorship,Наставничество
+up.mentor.desc,Monkey upgrades are 15% cheaper,Улучшения обезьян дешевле на 15%
+up.gitblame.name,Git Blame,Git Blame
+up.gitblame.desc,Offline work +10% efficiency and +1 hour limit,Офлайн-работа: +10% эффективности и +1 час лимита
+up.shakespeare.name,Shakespeare Mode,Режим Шекспира
+up.shakespeare.desc,All money x2,Все деньги x2
+up.office.name,Office Makeover,Ремонт офиса
+up.office.desc,New wallpaper: grey → yellow → aqua → purple. Each level +25% money,Новые обои: серые → жёлтые → бирюзовые → фиолетовые. Каждый уровень +25% денег
+up.office.req,Next level at player level {0},Следующий уровень — с {0} уровня игрока

@@ -1,0 +1,27 @@
+key,en,ru
+// Jabel framework strings. Games add their own tables to the LocalizationDatabase.
+jabel.requires,Requires {0} {1},Нужно: {0} {1}
+jabel.locked,Locked,Закрыто
+jabel.maxed,MAX,МАКС
+jabel.owned,Owned,Куплено
+jabel.buy,Buy,Купить
+jabel.offline.title,While you were away ({0}),Пока вас не было ({0})
+jabel.offline.nothing,Nothing happened. Hire someone to work for you!,Ничего не произошло. Наймите кого-нибудь!
+jabel.offline.capped,Only {0} counted. Upgrade to extend offline time.,Засчитано только {0}. Улучшения увеличат лимит.
+jabel.offline.collect,Collect,Забрать
+jabel.saved,Game saved,Игра сохранена
+time.d,d,д
+time.h,h,ч
+time.m,m,м
+time.s,s,с
+number.suffix.1,,тыс.
+number.suffix.2,,млн
+number.suffix.3,,млрд
+number.suffix.4,,трлн
+number.suffix.5,,квдр.
+number.suffix.6,,квнт.
+number.suffix.7,,скст.
+number.suffix.8,,сптл.
+number.suffix.9,,октл.
+number.suffix.10,,нонл.
+number.suffix.11,,дцлн.

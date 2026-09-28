@@ -1,0 +1,372 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 018ab70c10c977649ac02e365bc5e6dd, type: 3}
+  m_Name: ClickerConfig
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Core.ClickerConfig
+  configId: one_k_monkeys
+  saveVersion: 1
+  tickDuration: 0.25
+  maxTicksPerFrame: 20
+  variables:
+  - key: money
+    displayName:
+      key: var.money
+    icon: {fileID: 0}
+    initialValue:
+      m: 0
+      e: 0
+    persistence: 1
+    clampMin: 1
+    min:
+      m: 0
+      e: 0
+    clampMax: 0
+    max:
+      m: 0
+      e: 0
+    countdown: 0
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 2
+      trimZeros: 0
+    showInOfflineReport: 1
+  - key: playerLevel
+    displayName:
+      key: var.playerLevel
+    icon: {fileID: 0}
+    initialValue:
+      m: 1
+      e: 0
+    persistence: 1
+    clampMin: 1
+    min:
+      m: 0
+      e: 0
+    clampMax: 0
+    max:
+      m: 0
+      e: 0
+    countdown: 0
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+    showInOfflineReport: 1
+  - key: linesThisLevel
+    displayName:
+      key: 
+    icon: {fileID: 0}
+    initialValue:
+      m: 0
+      e: 0
+    persistence: 1
+    clampMin: 1
+    min:
+      m: 0
+      e: 0
+    clampMax: 0
+    max:
+      m: 0
+      e: 0
+    countdown: 0
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+    showInOfflineReport: 0
+  - key: totalChars
+    displayName:
+      key: var.totalChars
+    icon: {fileID: 0}
+    initialValue:
+      m: 0
+      e: 0
+    persistence: 0
+    clampMin: 1
+    min:
+      m: 0
+      e: 0
+    clampMax: 0
+    max:
+      m: 0
+      e: 0
+    countdown: 0
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+    showInOfflineReport: 1
+  - key: totalLines
+    displayName:
+      key: var.totalLines
+    icon: {fileID: 0}
+    initialValue:
+      m: 0
+      e: 0
+    persistence: 0
+    clampMin: 1
+    min:
+      m: 0
+      e: 0
+    clampMax: 0
+    max:
+      m: 0
+      e: 0
+    countdown: 0
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+    showInOfflineReport: 1
+  derivedValues:
+  - key: clickPower
+    displayName:
+      key: 
+    formula:
+      expression: (1 + count('mech_keyboard')) * 2 ^ count('coffee')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: critChance
+    displayName:
+      key: 
+    formula:
+      expression: 0.05 * count('rubber_duck')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: officeComfort
+    displayName:
+      key: 
+    formula:
+      expression: 1 + 0.25 * count('office_style')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: officeStyle
+    displayName:
+      key: 
+    formula:
+      expression: count('office_style')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: incomePerChar
+    displayName:
+      key: 
+    formula:
+      expression: 0.1 * 1.5 ^ count('stack_overflow') * 2 ^ count('shakespeare')
+        * officeComfort
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: levelReward
+    displayName:
+      key: 
+    formula:
+      expression: 10 * playerLevel * 2 ^ count('code_review') * 2 ^ count('shakespeare')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: linesForNextLevel
+    displayName:
+      key: 
+    formula:
+      expression: floor(20 * 2.5 ^ (playerLevel - 1))
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: monkeySpeed
+    displayName:
+      key: 
+    formula:
+      expression: 0.9 ^ count('bananas')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: monkeyBonus
+    displayName:
+      key: 
+    formula:
+      expression: count('autocomplete')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: monkeyDiscount
+    displayName:
+      key: 
+    formula:
+      expression: 0.9 ^ count('open_space')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  - key: upgradeDiscount
+    displayName:
+      key: 
+    formula:
+      expression: 0.85 ^ count('mentor')
+    format:
+      notation: 0
+      decimals: 2
+      smallDecimals: 0
+      trimZeros: 1
+  passiveBuffs:
+  - {fileID: 11400000, guid: 467adbd1029812b46b33272c656af184, type: 2}
+  - {fileID: 11400000, guid: a6eba58f7d5ebe4488f0125bd800f01c, type: 2}
+  - {fileID: 11400000, guid: 6ff74d6f94f90064e9b41b2afb21685a, type: 2}
+  - {fileID: 11400000, guid: 55e12081867833a46a452ae468e7d9ae, type: 2}
+  - {fileID: 11400000, guid: b34695d68b7abd841af9c633721ed6ee, type: 2}
+  - {fileID: 11400000, guid: bacc7f680571c24479903fd958b6bebe, type: 2}
+  - {fileID: 11400000, guid: 810ae3e70eb7acb43a2383fabcc2543e, type: 2}
+  - {fileID: 11400000, guid: f0275c8ab17c2d044b0b9f1fa286aee3, type: 2}
+  - {fileID: 11400000, guid: 76168a4aa76cb0a479a38e8e3ae893ea, type: 2}
+  - {fileID: 11400000, guid: 9502cc66ee9c0a543873e7334d2ca65c, type: 2}
+  - {fileID: 11400000, guid: 268fe4e40e0d27940915e60ea5ea0805, type: 2}
+  - {fileID: 11400000, guid: 36b836984200005429392bed50ece922, type: 2}
+  - {fileID: 11400000, guid: 0758c4f35e02c5c4c81e2532b927f988, type: 2}
+  activeBuffs:
+  - {fileID: 11400000, guid: 7aba9be415be46b44b9dc5a5d27b1151, type: 2}
+  - {fileID: 11400000, guid: d50b0dad661cda8409bdb91420b53961, type: 2}
+  tables: []
+  localization: {fileID: 11400000, guid: b46faf52cfa5afe46952777ddcad7d52, type: 2}
+  onStart:
+    blocks: []
+  onNewGame:
+    blocks:
+    - rid: 6647298278700351679
+  onClick:
+    blocks:
+    - rid: 6647298278700351680
+    - rid: 6647298278700351681
+    - rid: 6647298278700351682
+  onTick:
+    blocks: []
+  onReturn:
+    blocks:
+    - rid: 6647298278700351683
+  storage: 0
+  saveSlot: one_k_monkeys
+  autosaveInterval: 20
+  offlineProgress: 1
+  offlineMaxSeconds:
+    expression: (4 + count('git_blame')) * 3600
+  offlineEfficiency:
+    expression: 0.5 + 0.1 * count('git_blame')
+  offlineReportThreshold: 30
+  offlineSimulationSteps: 40
+  references:
+    version: 2
+    RefIds:
+    - rid: 6647298278700351679
+      type: {class: NotifyBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        message:
+          key: notify.welcome
+        arguments: []
+        style: 0
+        icon: {fileID: 0}
+        skipWhenOffline: 1
+    - rid: 6647298278700351680
+      type: {class: SetVariableBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        target:
+          scope: 1
+          name: power
+        value:
+          expression: clickPower
+    - rid: 6647298278700351681
+      type: {class: ChanceBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        probability:
+          expression: critChance
+        then:
+          blocks:
+          - rid: 6647298278700351684
+          - rid: 6647298278700351685
+          - rid: 6647298278700351686
+        otherwise:
+          blocks: []
+    - rid: 6647298278700351682
+      type: {class: CallFunctionBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        function: WriteCode
+        arguments:
+        - name: amount
+          value:
+            expression: power
+          scaleWithBatch: 0
+        resultLocal: value
+    - rid: 6647298278700351683
+      type: {class: CommentBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        text: The offline popup reports the gains; add a welcome-back bonus here
+          if you like.
+    - rid: 6647298278700351684
+      type: {class: ModifyVariableBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        target:
+          scope: 1
+          name: power
+        operation: 2
+        amount:
+          expression: 10
+        scaleWithBatch: 1
+    - rid: 6647298278700351685
+      type: {class: SetVariableBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        target:
+          scope: 1
+          name: critical
+        value:
+          expression: 1
+    - rid: 6647298278700351686
+      type: {class: NotifyBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        message:
+          key: notify.critical
+        arguments: []
+        style: 3
+        icon: {fileID: 0}
+        skipWhenOffline: 1

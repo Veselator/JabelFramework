@@ -1,0 +1,51 @@
+using System;
+using System.Text;
+
+namespace Office.Monkeys
+{
+    // Every monkey gets a typewriter. Nobody reads the manual.
+    public sealed class Typewriter
+    {
+        private readonly StringBuilder _page = new StringBuilder();
+        private readonly Random _random;
+        private int _inkLevel = 100;
+
+        public Typewriter(int seed)
+        {
+            _random = new Random(seed);
+        }
+
+        public char Press()
+        {
+            if (_inkLevel <= 0)
+            {
+                throw new InvalidOperationException("Out of ink. Ask for a raise.");
+            }
+
+            const string keys = "abcdefghijklmnopqrstuvwxyz .,!?";
+            char key = keys[_random.Next(keys.Length)];
+            _page.Append(key);
+            _inkLevel--;
+            return key;
+        }
+
+        public bool Contains(string masterpiece)
+        {
+            return _page.ToString().IndexOf(masterpiece, StringComparison.Ordinal) >= 0;
+        }
+
+        public void Refill() => _inkLevel = 100;
+
+        public override string ToString() => _page.ToString();
+    }
+
+    public static class Experiment
+    {
+        public static long HoursUntil(string text, int monkeys)
+        {
+            double chance = Math.Pow(1.0 / 31.0, text.Length);
+            double attemptsPerHour = monkeys * 3600.0;
+            return (long)Math.Min(long.MaxValue, 1.0 / (chance * attemptsPerHour));
+        }
+    }
+}

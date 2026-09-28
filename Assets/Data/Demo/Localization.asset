@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ff311887b24a2e4688dc695c781527e, type: 3}
+  m_Name: Localization
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Localization.LocalizationDatabase
+  languages:
+  - code: en
+    nativeName: English
+    cultureName: 
+    fontOverride: {fileID: 0}
+    systemLanguages: 0a000000
+  - code: ru
+    nativeName: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439"
+    cultureName: 
+    fontOverride: {fileID: 0}
+    systemLanguages: 1e0000000300000026000000
+  defaultLanguage: en
+  detectSystemLanguage: 1
+  tables:
+  - {fileID: 4900000, guid: a0282d7ee34dbea4db072b2c9e629de7, type: 3}
+  - {fileID: 4900000, guid: 5cec0aacf668d354e9ea6922f07ddb8d, type: 3}

@@ -1,0 +1,381 @@
+
+import argparse
+import copy
+import datetime as dt
+import json
+import os
+import re
+import sys
+
+import docx
+from docx.oxml.ns import qn
+
+DAY_COLS = ["пн", "вт", "ср", "чт", "пт"]
+RANGE_RE = re.compile(r"^\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*\.?\s*$")  # "5", "5.", "22-23", "69-70."
+SEM2_RE = re.compile(r"(?<![IІ])[IІ]{2}\s*семестр", re.I)        # латинські I та кириличні І
+
+
+def parse_date(s):
+    return dt.date.fromisoformat(s)
+
+
+def lesson_weekdays(schedule_path, subject, grade):
+    """{weekday: кількість уроків того дня} для «<предмет> <клас>».
+    Клас '9' НЕ збігається з '9.1' (групи задаються явно: --grade 9.1)."""
+    t = docx.Document(schedule_path).tables[0]
+    header = [c.text.strip().lower() for c in t.rows[0].cells]
+    cols = {i: DAY_COLS.index(h) for i, h in enumerate(header) if h in DAY_COLS}
+    pat = re.compile(rf"^{re.escape(subject)}\s*{re.escape(grade)}(?![.\d])", re.I)
+    counts = {}
+    for row in t.rows[1:]:
+        for i, wd in cols.items():
+            if pat.match(row.cells[i].text.strip()):
+                counts[wd] = counts.get(wd, 0) + 1
+    return counts
+
+
+def semester_dates(cfg, weekday_counts):
+    """Список списків дат — окремо для кожного семестру."""
+    hol = [(parse_date(a), parse_date(b)) for a, b in cfg.get("holidays", [])]
+    off = {parse_date(d) for d in cfg.get("extra_days_off", [])}
+    res = []
+    for a, b in cfg["semesters"]:
+        out, d, end = [], parse_date(a), parse_date(b)
+        while d <= end:
+            if d.weekday() in weekday_counts and d not in off and not any(x <= d <= y for x, y in hol):
+                out.extend([d] * weekday_counts[d.weekday()])
+            d += dt.timedelta(1)
+        res.append(out)
+    return res
+
+
+def tc_text(tc):
+    return "".join(t.text or "" for t in tc.iter(qn("w:t"))).strip()
+
+
+def _clean_rpr(src):
+    rpr = copy.deepcopy(src)
+    rpr.tag = qn("w:rPr")
+    for bad in rpr.findall(qn("w:rPrChange")):
+        rpr.remove(bad)
+    return rpr
+
+
+def run_rpr_for(tc, row_tcs):
+    """rPr для нового тексту (стиль оригіналу), за пріоритетом:
+    1) rPr наявного run з датою в цій комірці (старі дати в шаблоні);
+    2) pPr/rPr першого абзацу комірки; 3) rPr першого run у комірці №; 4) нічого."""
+    for r in tc.iter(qn("w:r")):
+        t = "".join(x.text or "" for x in r.iter(qn("w:t")))
+        if re.search(r"\d{1,2}\.\d{1,2}", t) and r.find(qn("w:rPr")) is not None:
+            return _clean_rpr(r.find(qn("w:rPr")))
+    p = tc.find(qn("w:p"))
+    src = p.find(qn("w:pPr") + "/" + qn("w:rPr")) if p is not None else None
+    if src is None:
+        src = row_tcs[0].find(".//" + qn("w:r") + "/" + qn("w:rPr"))
+    return _clean_rpr(src) if src is not None else None
+
+
+def write_dates(tc, texts, rpr):
+    """Пише тексти у комірку: кожен — окремим абзацом з pPr першого абзацу (стиль оригіналу).
+    Старий вміст комірки (старі дати, сміття) видаляється."""
+    paras = tc.findall(qn("w:p"))
+    first = paras[0]
+    for extra in paras[1:]:
+        tc.remove(extra)
+    for child in list(first):
+        if child.tag != qn("w:pPr"):
+            first.remove(child)
+    empty = copy.deepcopy(first)
+    prev = None
+    for text in texts:
+        p = first if prev is None else copy.deepcopy(empty)
+        if prev is not None:
+            prev.addnext(p)
+        r = p.makeelement(qn("w:r"), {})
+        if rpr is not None:
+            r.append(copy.deepcopy(rpr))
+        t = r.makeelement(qn("w:t"), {})
+        t.text = text
+        r.append(t)
+        p.append(r)
+        prev = p
+
+
+def assign(pool, need):
+    """Дата для кожного уроку. Якщо дат менше на k — ущільнення:
+    останні 2k уроків ідуть парами на останні k дат. Повертає (дати, індекси ущільнених)."""
+    k = need - len(pool)
+    if k <= 0:
+        return pool[:need], []
+    if k > len(pool):
+        return pool + [None] * (need - len(pool)), []
+    single = pool[:len(pool) - k]
+    res = list(single)
+    for d in pool[len(pool) - k:]:
+        res += [d, d]
+    return res, list(range(len(single), need))
+
+
+def fill_tables(tbls, streams, fmt, fill_numbers=True, group_font_pt=10):
+    """Проставляє дати в одну або кілька таблиць (суцільна нумерація) одного класу.
+    streams = [(мітка, суфікс_групи|None, дати_по_семестрах)]. Кілька streams = групи класу:
+    у кожній комірці дати — по рядку на групу: "01.09 група 1", "04.09 група 2"."""
+    date_col = 1
+    slots = []            # (date_tc, anchor, row_tcs, кількість_уроків, семестр, номер_уроку)
+    sem = 0
+    groups, members = [], {}  # [anchor_tc, уроків у групі], id(anchor) -> [комірки групи]
+    last_no = 0
+    filled_numbers = 0
+    num_rpr = None        # стиль останнього текстового номера (для дописування номерів)
+    for tbl in tbls:
+        anchor = None     # верхня комірка vMerge-групи в колонці дати
+        for tr in tbl.findall(qn("w:tr")):
+            tcs = tr.findall(qn("w:tc"))
+            first = tcs[0]
+            txt = tc_text(first)
+            if len(tcs) <= date_col:              # рядок-заголовок (Розділ/Тема/Семестр)
+                if SEM2_RE.search(txt):
+                    sem = 1
+                anchor = None
+                continue
+            if SEM2_RE.match(txt):
+                sem = 1
+                continue
+            vm0 = first.find(qn("w:tcPr") + "/" + qn("w:vMerge"))
+            if vm0 is not None and vm0.get(qn("w:val")) != "restart":
+                continue                          # продовження об'єднаного рядка того ж уроку
+            is_num = first.find(".//" + qn("w:numPr")) is not None
+            m = RANGE_RE.match(txt)
+            if is_num:
+                n = 1
+                last_no += 1
+            elif m:
+                n = int(m.group(2)) - int(m.group(1)) + 1 if m.group(2) else 1
+                last_no = int(m.group(2) or m.group(1))
+                r0 = first.find(".//" + qn("w:r") + "/" + qn("w:rPr"))
+                if r0 is not None:
+                    num_rpr = r0
+            elif not txt and last_no and any(tc_text(c) for c in tcs[date_col + 1:]):
+                # урок без номера (напр. 2 семестр у фізиці 11) — дописуємо номер у стилі попередніх
+                n = 1
+                last_no += 1
+                if fill_numbers:
+                    rpr = _clean_rpr(num_rpr) if num_rpr is not None else run_rpr_for(first, tcs)
+                    write_dates(first, [str(last_no)], rpr)
+                    filled_numbers += 1
+            else:
+                continue
+            dtc = tcs[date_col]
+            vm = dtc.find(qn("w:tcPr") + "/" + qn("w:vMerge"))
+            if vm is None:
+                anchor = None
+            elif vm.get(qn("w:val")) == "restart" or anchor is None:
+                anchor = dtc
+                groups.append([dtc, 0])
+            if anchor is not None:
+                groups[-1][1] += n
+                members.setdefault(id(anchor), []).append(dtc)
+            slots.append((dtc, anchor, tcs, n, sem, last_no))
+
+    # Об'єднані по вертикалі комірки дати, на які припадає >1 урок, РОЗ'ЄДНУЄМО.
+    split = set()
+    for a_tc, lessons in groups:
+        if lessons > 1:
+            for c in members[id(a_tc)]:
+                vm = c.find(qn("w:tcPr") + "/" + qn("w:vMerge"))
+                if vm is not None:
+                    vm.getparent().remove(vm)
+            split.add(id(a_tc))
+    slots = [(dtc if (anc is None or id(anc) in split) else anc, tcs, n, s, no)
+             for dtc, anc, tcs, n, s, no in slots]
+
+    has_marker = any(sl[3] == 1 for sl in slots)
+    if not has_marker:  # без маркера семестрів — суцільний потік дат
+        slots = [(a, b, n, 0, no) for a, b, n, _, no in slots]
+    n_pools = 2 if has_marker else 1
+
+    units = [[] for _ in range(n_pools)]  # номери уроків по семестрах ("22-23" = 2 уроки)
+    for target, tcs, n, s, no in slots:
+        units[s].extend(range(no - n + 1, no + 1))
+
+    buckets = {}  # id(target) -> [target, row_tcs, [тексти], merged?]
+    for target, tcs, n, s, no in slots:
+        if id(target) not in buckets:
+            merged = target.find(qn("w:tcPr") + "/" + qn("w:vMerge")) is not None
+            buckets[id(target)] = [target, tcs, [], merged]
+
+    lines = []
+    for label, suffix, sem_dates in streams:
+        pools = sem_dates if has_marker else [[d for ds in sem_dates for d in ds]]
+        assigned, paired_nos = [], []
+        for k, pool in enumerate(pools):
+            dates, paired = assign(pool, len(units[k]))
+            assigned.append(dates)
+            paired_nos.append([units[k][i] for i in paired])
+
+        idx = [0] * len(pools)
+        for target, tcs, n, s, no in slots:
+            chunk = [d for d in assigned[s][idx[s]:idx[s] + n] if d is not None]
+            idx[s] += n
+            b = buckets[id(target)]
+            texts = list(dict.fromkeys(d.strftime(fmt) for d in chunk))  # без дублів у комірці
+            if suffix:                       # групи: одна група — один рядок у комірці
+                if texts:
+                    b[2].append(", ".join(texts) + f" {suffix}")  # "01.09 група 1" (без тире)
+            elif b[3]:
+                b[2].extend(texts)           # об'єднана комірка (1 урок): кожна дата з нового рядка
+            elif texts:
+                b[2].append(", ".join(texts))  # діапазон "69-70" в одній комірці
+
+        for k, pool in enumerate(pools):
+            need = len(units[k])
+            name = f"семестр {k + 1}" if has_marker else "рік"
+            warn = ""
+            if len(pool) < need:
+                pn = paired_nos[k]
+                pairs = ", ".join(f"{pn[i]}+{pn[i + 1]}" for i in range(0, len(pn), 2))
+                warn = f"  !!! НЕ ВИСТАЧАЄ {need - len(pool)} ДАТ → ущільнено пари уроків: {pairs}"
+            elif len(pool) > need:
+                warn = f"  (вільних дат: {len(pool) - need})"
+            real = [d for d in assigned[k] if d is not None]
+            last = f", останній {real[-1]:%d.%m.%Y}" if real else ""
+            lines.append(f"  [{label}] {name}: уроків {need}, дат {len(pool)}{last}{warn}")
+
+    has_groups = any(sfx for _, sfx, _ in streams)
+    longest, rpr_sz = "", None
+    for target, tcs, texts, _ in buckets.values():
+        rpr = run_rpr_for(target, tcs)
+        if has_groups:                   # групи: дати кеглем group_font_pt (10), решта стилю — з оригіналу
+            rpr = set_font_size(rpr if rpr is not None else target.makeelement(qn("w:rPr"), {}), group_font_pt)
+        write_dates(target, texts, rpr)  # також очищує старі дати
+        for t in texts:
+            if len(t) > len(longest):
+                longest = t
+                sz = rpr.find(qn("w:sz")) if rpr is not None else None
+                rpr_sz = int(sz.get(qn("w:val"))) / 2 if sz is not None else None
+    if any(sfx for _, sfx, _ in streams) and slots:
+        lesson_tbl = slots[0][0].getparent().getparent()  # tc → tr → tbl з уроками
+        widened = widen_date_column(lesson_tbl, date_col, longest, rpr_sz or 12)
+        if widened:
+            lines.append(f"  колонку дати розширено на {widened} dxa (за рахунок найширшої колонки)")
+    if filled_numbers:
+        lines.append(f"  дописано номерів уроків: {filled_numbers}")
+    return "\n".join(lines)
+
+
+def set_font_size(rpr, pt):
+    """Ставить w:sz/w:szCs = pt (у пів-пунктах) з дотриманням порядку елементів rPr."""
+    rpr = copy.deepcopy(rpr)
+    val = str(int(pt * 2))
+    for tag in ("w:sz", "w:szCs"):
+        el = rpr.find(qn(tag))
+        if el is None:
+            el = rpr.makeelement(qn(tag), {})
+            after = [qn(t) for t in ("w:szCs", "w:highlight", "w:u", "w:effect", "w:bdr", "w:shd",
+                                       "w:fitText", "w:vertAlign", "w:rtl", "w:cs", "w:em", "w:lang",
+                                       "w:eastAsianLayout", "w:specVanish", "w:oMath")]
+            nxt = next((c for c in rpr if c.tag in after), None)
+            if tag == "w:szCs":
+                sz = rpr.find(qn("w:sz"))
+                sz.addnext(el)
+            elif nxt is not None:
+                nxt.addprevious(el)
+            else:
+                rpr.append(el)
+        el.set(qn("w:val"), val)
+    return rpr
+
+
+def _grid_cells(tr):
+    """[(tc, перша_колонка_сітки, кількість_колонок)] для рядка."""
+    out, col = [], 0
+    for tc in tr.findall(qn("w:tc")):
+        gs = tc.find(qn("w:tcPr") + "/" + qn("w:gridSpan"))
+        span = int(gs.get(qn("w:val"))) if gs is not None else 1
+        out.append((tc, col, span))
+        col += span
+    return out
+
+
+def widen_date_column(tbl, date_col, longest_text, font_pt):
+    """Якщо найдовший рядок дати (напр. '01.09 група 1') не влазить у колонку дати —
+    розширює її, забираючи ширину в найширшої колонки (ширина таблиці не змінюється).
+    Оцінка: символ ≈ 0.5 кегля + поля комірки ~12 pt. Повертає, на скільки dxa розширено."""
+    grid = tbl.find(qn("w:tblGrid"))
+    cols = grid.findall(qn("w:gridCol"))
+    widths = [int(c.get(qn("w:w"))) for c in cols]
+    need = int((len(longest_text) * font_pt * 0.5 + 12) * 20)
+    delta = need - widths[date_col]
+    if delta <= 0:
+        return 0
+    donor = max(range(len(widths)), key=lambda i: widths[i] if i != date_col else -1)
+    if widths[donor] - delta < 1500:
+        return 0
+    cols[date_col].set(qn("w:w"), str(widths[date_col] + delta))
+    cols[donor].set(qn("w:w"), str(widths[donor] - delta))
+    for tr in tbl.findall(qn("w:tr")):
+        for tc, c0, span in _grid_cells(tr):
+            covered = range(c0, c0 + span)
+            if (date_col in covered) == (donor in covered):
+                continue                     # комірка на всю ширину або не зачіпає ці колонки
+            w = tc.find(qn("w:tcPr") + "/" + qn("w:tcW"))
+            if w is None or w.get(qn("w:type"), "dxa") != "dxa":
+                continue
+            w.set(qn("w:w"), str(int(w.get(qn("w:w"))) + (delta if date_col in covered else -delta)))
+    return delta
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("plan")
+    ap.add_argument("--schedule", required=True)
+    ap.add_argument("--subject", required=True, help="як у розкладі: Фізика, Інформатика, ЗУ, Астрономія")
+    ap.add_argument("--grade", help="клас/група як у розкладі: 7, 9.1")
+    ap.add_argument("--table", action="append", default=[],
+                    help="IDX[,IDX...]=КЛАС — таблиці для класу (кілька класів в одному файлі)")
+    ap.add_argument("--groups", action="append", default=[],
+                    help="ГРУПА=ПІДПИС, напр. '9.1=група 1' — групи класу в ОДНІЙ таблиці: у комірці дати "
+                         "рядок на кожну групу '01.09 група 1' (кегль --group-font)")
+    ap.add_argument("--config", required=True)
+    ap.add_argument("--out", default="Готові плани")
+    ap.add_argument("--suffix", default="", help="додається до імені вихідного файлу, напр. ' (9.1)'")
+    ap.add_argument("--fmt", default="%d.%m")
+    ap.add_argument("--group-font", type=float, default=10, help="кегль дат у плануваннях з групами (типово 10)")
+    ap.add_argument("--no-fill-numbers", action="store_true", help="не дописувати відсутні номери уроків")
+    a = ap.parse_args()
+
+    cfg = json.load(open(a.config, encoding="utf-8"))
+    d = docx.Document(a.plan)
+    tables = d.tables
+
+    if a.groups:
+        jobs = [(list(range(len(tables))), [g.split("=", 1) for g in a.groups])]
+    elif a.table:
+        jobs = [([int(i) for i in x.split("=")[0].split(",")], [[x.split("=")[1], None]]) for x in a.table]
+    else:
+        if not a.grade:
+            sys.exit("Потрібно --grade, --table або --groups")
+        jobs = [(list(range(len(tables))), [[a.grade, None]])]  # усі таблиці — один потік уроків
+
+    print(os.path.basename(a.plan) + a.suffix)
+    for tis, members in jobs:
+        streams = []
+        for grade, suffix in members:
+            wds = lesson_weekdays(a.schedule, a.subject, grade)
+            if not wds:
+                sys.exit(f"У розкладі не знайдено '{a.subject} {grade}'")
+            days = ", ".join(DAY_COLS[k] + (f"×{v}" if v > 1 else "") for k, v in sorted(wds.items()))
+            print(f"  {a.subject} {grade}{' (' + suffix + ')' if suffix else ''} (таблиці {tis}): дні [{days}]")
+            streams.append((f"{a.subject} {grade}", suffix, semester_dates(cfg, wds)))
+        print(fill_tables([tables[i]._tbl for i in tis], streams, a.fmt, not a.no_fill_numbers, a.group_font))
+
+    os.makedirs(a.out, exist_ok=True)
+    base, _ = os.path.splitext(os.path.basename(a.plan))
+    out_path = os.path.join(a.out, base + a.suffix + ".docx")
+    d.save(out_path)
+    print(f"  -> {out_path}")
+
+
+if __name__ == "__main__":
+    main()

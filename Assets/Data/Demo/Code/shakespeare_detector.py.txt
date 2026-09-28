@@ -1,0 +1,164 @@
+"""
+shakespeare_detector.py
+
+Scans everything the monkeys type and raises an alarm the moment
+something resembling literature appears. Uses n-gram overlap against
+a tiny corpus and a very generous definition of "resembling".
+"""
+
+from __future__ import annotations
+
+import math
+import re
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from typing import Iterable
+
+CORPUS = {
+    "hamlet": "to be or not to be that is the question whether tis nobler in the mind to suffer",
+    "macbeth": "tomorrow and tomorrow and tomorrow creeps in this petty pace from day to day",
+    "sonnet18": "shall i compare thee to a summers day thou art more lovely and more temperate",
+    "war_and_peace": "well prince so genoa and lucca are now just family estates of the buonapartes",
+}
+
+WORD_RE = re.compile(r"[a-z']+")
+
+
+def words(text: str) -> list[str]:
+    return WORD_RE.findall(text.lower())
+
+
+def ngrams(tokens: list[str], n: int) -> Counter:
+    return Counter(tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1))
+
+
+@dataclass
+class Match:
+    work: str
+    score: float
+    shared: list[str] = field(default_factory=list)
+
+    def headline(self) -> str:
+        percent = round(self.score * 100, 1)
+        return f"{self.work}: {percent}% similar ({', '.join(self.shared[:5]) or 'nothing yet'})"
+
+
+class Detector:
+    def __init__(self, corpus: dict[str, str], n: int = 2) -> None:
+        self.n = n
+        self.corpus_tokens = {name: words(text) for name, text in corpus.items()}
+        self.corpus_grams = {name: ngrams(tokens, n) for name, tokens in self.corpus_tokens.items()}
+        self.vocabulary = set().union(*self.corpus_tokens.values())
+        self.alarms: list[Match] = []
+
+    def cosine(self, a: Counter, b: Counter) -> float:
+        common = set(a) & set(b)
+        dot = sum(a[k] * b[k] for k in common)
+        norm = math.sqrt(sum(v * v for v in a.values())) * math.sqrt(sum(v * v for v in b.values()))
+        return dot / norm if norm else 0.0
+
+    def check(self, typed: str) -> list[Match]:
+        tokens = words(typed)
+        grams = ngrams(tokens, self.n)
+        matches = []
+        for work, reference in self.corpus_grams.items():
+            score = self.cosine(grams, reference)
+            shared = [" ".join(g) for g in set(grams) & set(reference)]
+            matches.append(Match(work, score, sorted(shared)))
+        matches.sort(key=lambda m: m.score, reverse=True)
+        return matches
+
+    def vocabulary_ratio(self, typed: str) -> float:
+        tokens = words(typed)
+        if not tokens:
+            return 0.0
+        return sum(1 for t in tokens if t in self.vocabulary) / len(tokens)
+
+    def watch(self, stream: Iterable[str], threshold: float = 0.2) -> None:
+        buffer = ""
+        for chunk in stream:
+            buffer = (buffer + chunk)[-400:]
+            best = self.check(buffer)[0]
+            if best.score >= threshold:
+                self.alarms.append(best)
+                print("ALARM!", best.headline())
+                buffer = ""
+
+
+class MonkeyTypist:
+    """A pseudo-random typist that slowly learns which words please the detector."""
+
+    def __init__(self, seed: int, detector: Detector) -> None:
+        self.state = seed
+        self.detector = detector
+        self.favourites: defaultdict[str, int] = defaultdict(int)
+
+    def _next(self) -> int:
+        self.state = (1103515245 * self.state + 12345) % (2 ** 31)
+        return self.state
+
+    def word(self) -> str:
+        vocabulary = sorted(self.detector.vocabulary)
+        if self.favourites and self._next() % 3 == 0:
+            ranked = sorted(self.favourites, key=self.favourites.get, reverse=True)
+            return ranked[self._next() % min(5, len(ranked))]
+        if self._next() % 4 == 0:
+            return vocabulary[self._next() % len(vocabulary)]
+        length = 2 + self._next() % 5
+        return "".join(chr(ord("a") + self._next() % 26) for _ in range(length))
+
+    def type_sentence(self, length: int = 8) -> str:
+        sentence = [self.word() for _ in range(length)]
+        for w in sentence:
+            if w in self.detector.vocabulary:
+                self.favourites[w] += 1
+        return " ".join(sentence) + ". "
+
+
+def report(detector: Detector, samples: list[str]) -> None:
+    for text in samples:
+        best = detector.check(text)[0]
+        ratio = detector.vocabulary_ratio(text)
+        print(f"{text[:40]!r:44} -> {best.headline()} | vocab {ratio:.0%}")
+
+
+def best_lines(detector: Detector, typists: list[MonkeyTypist], attempts: int = 50) -> list[tuple[float, str]]:
+    """Keeps the most literary sentence each monkey produced, for the office newsletter."""
+    results = []
+    for index, typist in enumerate(typists, start=1):
+        best_score, best_text = 0.0, ""
+        for _ in range(attempts):
+            sentence = typist.type_sentence(10)
+            score = detector.check(sentence)[0].score
+            if score > best_score:
+                best_score, best_text = score, sentence
+        results.append((best_score, f"monkey #{index}: {best_text.strip()}"))
+    results.sort(reverse=True)
+    return results
+
+
+def main() -> None:
+    detector = Detector(CORPUS, n=2)
+    report(detector, [
+        "asdf qwerty banana banana",
+        "to be or not to banana",
+        "tomorrow and tomorrow and coffee",
+        "shall i compare thee to a keyboard",
+    ])
+
+    typists = [MonkeyTypist(seed, detector) for seed in range(1, 6)]
+    stream = (t.type_sentence() for _ in range(200) for t in typists)
+    detector.watch(stream, threshold=0.25)
+
+    print(f"{len(detector.alarms)} alarms raised")
+    by_work = Counter(m.work for m in detector.alarms)
+    for work, count in by_work.most_common():
+        print(f"  {work:15} {count}")
+
+    print("Newsletter picks:")
+    for score, line in best_lines(detector, typists)[:3]:
+        print(f"  {score:.2f}  {line}")
+
+
+if __name__ == "__main__":
+    main()

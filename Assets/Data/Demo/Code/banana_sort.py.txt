@@ -1,0 +1,36 @@
+import random
+from dataclasses import dataclass
+
+
+@dataclass
+class Banana:
+    ripeness: float
+    length_cm: int
+
+    def is_edible(self) -> bool:
+        return 0.3 < self.ripeness < 0.9
+
+
+def banana_sort(bunch):
+    """Sorts bananas by ripeness. Monkeys invented this before bubble sort."""
+    if len(bunch) <= 1:
+        return bunch
+    pivot = bunch[len(bunch) // 2]
+    greener = [b for b in bunch if b.ripeness < pivot.ripeness]
+    same = [b for b in bunch if b.ripeness == pivot.ripeness]
+    riper = [b for b in bunch if b.ripeness > pivot.ripeness]
+    return banana_sort(greener) + same + banana_sort(riper)
+
+
+def harvest(count=12):
+    return [Banana(random.random(), random.randint(12, 24)) for _ in range(count)]
+
+
+if __name__ == "__main__":
+    bunch = harvest()
+    for banana in banana_sort(bunch):
+        mark = "yum" if banana.is_edible() else "later"
+        print(f"{banana.ripeness:.2f} {banana.length_cm}cm -> {mark}")
+
+    edible = sum(1 for b in bunch if b.is_edible())
+    print(f"Edible bananas: {edible} of {len(bunch)}")

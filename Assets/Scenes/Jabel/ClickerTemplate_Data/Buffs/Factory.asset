@@ -1,0 +1,86 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 447bdf9cc8b12df49b987aafd49155ab, type: 3}
+  m_Name: Factory
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Buffs.ActiveBuff
+  id: factory
+  icon: {fileID: 0}
+  displayName:
+    key: tpl.buff.factory.name
+  description:
+    key: tpl.buff.factory.desc
+  tag: auto
+  sortOrder: 11
+  price:
+    currency: money
+    mode: 0
+    baseCost:
+      m: 200
+      e: 0
+    growth: 1.2
+    formula:
+      expression: 
+    multiplier:
+      expression: 
+  maxCount: 0
+  visibility: 1
+  requirements:
+  - variable: money
+    minimum:
+      m: 100
+      e: 0
+  condition:
+    expression: 
+  conditionHint:
+    key: 
+  resetOnRun: 1
+  onBought:
+    blocks: []
+  period:
+    expression: 20
+  onTick:
+    blocks:
+    - rid: 6647298172313666197
+  instanced: 1
+  staggerInstances: 1
+  maxLevel: 5
+  levelUpPrice:
+    currency: money
+    mode: 1
+    baseCost:
+      m: 10
+      e: 0
+    growth: 1.15
+    formula:
+      expression: 100 * 3 ^ level
+    multiplier:
+      expression: 
+  levelUpCondition:
+    expression: 
+  levelUpConditionHint:
+    key: 
+  onLevelUp:
+    blocks: []
+  references:
+    version: 2
+    RefIds:
+    - rid: 6647298172313666197
+      type: {class: ModifyVariableBlock, ns: Jabel.Scripting.Blocks, asm: Jabel.Runtime}
+      data:
+        enabled: 1
+        target:
+          scope: 0
+          name: money
+        operation: 0
+        amount:
+          expression: 25 * level
+        scaleWithBatch: 1

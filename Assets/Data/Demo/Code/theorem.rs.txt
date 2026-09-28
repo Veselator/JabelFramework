@@ -1,0 +1,52 @@
+// The infinite monkey theorem, proven the practical way.
+use std::collections::HashMap;
+
+const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz ";
+
+struct Monkey {
+    id: u32,
+    typed: String,
+    rng_state: u64,
+}
+
+impl Monkey {
+    fn new(id: u32) -> Self {
+        Monkey { id, typed: String::new(), rng_state: 0x9E3779B97F4A7C15 ^ id as u64 }
+    }
+
+    fn next_key(&mut self) -> char {
+        // xorshift: cheap randomness for cheap labour
+        self.rng_state ^= self.rng_state << 13;
+        self.rng_state ^= self.rng_state >> 7;
+        self.rng_state ^= self.rng_state << 17;
+        let index = (self.rng_state % ALPHABET.len() as u64) as usize;
+        ALPHABET.chars().nth(index).unwrap()
+    }
+
+    fn type_for(&mut self, keystrokes: usize) {
+        for _ in 0..keystrokes {
+            let key = self.next_key();
+            self.typed.push(key);
+        }
+    }
+}
+
+fn main() {
+    let mut office: Vec<Monkey> = (1..=1000).map(Monkey::new).collect();
+    let mut words: HashMap<String, usize> = HashMap::new();
+
+    for monkey in office.iter_mut() {
+        monkey.type_for(10_000);
+        for word in monkey.typed.split_whitespace() {
+            *words.entry(word.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    let found = ["war", "and", "peace"]
+        .iter()
+        .filter(|w| words.contains_key(**w))
+        .count();
+
+    println!("Monkey {} finished first.", office[0].id);
+    println!("Found {} of 3 magic words. Keep typing!", found);
+}

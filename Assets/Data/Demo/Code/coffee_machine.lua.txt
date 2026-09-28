@@ -1,0 +1,167 @@
+-- coffee_machine.lua
+-- Firmware for the office coffee machine. Monkeys are loud, impatient
+-- and occasionally try to pay with bananas. The machine copes.
+
+local CoffeeMachine = {}
+CoffeeMachine.__index = CoffeeMachine
+
+local RECIPES = {
+  espresso   = { water = 30,  beans = 9,  milk = 0,   price = 1.5 },
+  double     = { water = 60,  beans = 18, milk = 0,   price = 2.5 },
+  cappuccino = { water = 30,  beans = 9,  milk = 120, price = 3.0 },
+  latte      = { water = 30,  beans = 9,  milk = 200, price = 3.2 },
+  banana_mix = { water = 20,  beans = 5,  milk = 150, price = 2.0, banana = 1 },
+}
+
+local MAX = { water = 2000, beans = 500, milk = 1500, banana = 20 }
+
+function CoffeeMachine.new(name)
+  local self = setmetatable({}, CoffeeMachine)
+  self.name = name or "Espresso-3000"
+  self.stock = { water = MAX.water, beans = MAX.beans, milk = MAX.milk, banana = 10 }
+  self.cash = 0
+  self.bananas_received = 0
+  self.log = {}
+  self.cups_served = 0
+  self.broken = false
+  return self
+end
+
+function CoffeeMachine:say(message)
+  local line = string.format("[%s] %s", self.name, message)
+  table.insert(self.log, line)
+  print(line)
+end
+
+function CoffeeMachine:can_make(recipe)
+  for ingredient, amount in pairs(recipe) do
+    if ingredient ~= "price" then
+      local have = self.stock[ingredient] or 0
+      if have < amount then
+        return false, ingredient
+      end
+    end
+  end
+  return true
+end
+
+function CoffeeMachine:consume(recipe)
+  for ingredient, amount in pairs(recipe) do
+    if ingredient ~= "price" then
+      self.stock[ingredient] = self.stock[ingredient] - amount
+    end
+  end
+end
+
+-- Payment accepts coins and, unofficially, bananas (1 banana = 0.5 coins).
+function CoffeeMachine:pay(coins, bananas)
+  coins = coins or 0
+  bananas = bananas or 0
+  if bananas > 0 then
+    self:say("Banana payment detected. Sigh. Accepting.")
+    self.bananas_received = self.bananas_received + bananas
+    self.stock.banana = math.min(MAX.banana, self.stock.banana + bananas)
+  end
+  return coins + bananas * 0.5
+end
+
+function CoffeeMachine:order(monkey, drink, coins, bananas)
+  if self.broken then
+    self:say("Out of order. Please do not hit the machine.")
+    return nil
+  end
+
+  local recipe = RECIPES[drink]
+  if not recipe then
+    self:say(monkey .. " asked for '" .. tostring(drink) .. "'. We do not serve that.")
+    return nil
+  end
+
+  local ok, missing = self:can_make(recipe)
+  if not ok then
+    self:say("Not enough " .. missing .. " for a " .. drink .. ".")
+    return nil
+  end
+
+  local paid = self:pay(coins, bananas)
+  if paid < recipe.price then
+    self:say(string.format("%s paid %.2f but a %s costs %.2f.", monkey, paid, drink, recipe.price))
+    return nil
+  end
+
+  self:consume(recipe)
+  self.cash = self.cash + recipe.price
+  self.cups_served = self.cups_served + 1
+
+  local change = paid - recipe.price
+  self:say(string.format("One %s for %s. Change: %.2f", drink, monkey, change))
+
+  -- Rough handling of the machine has consequences.
+  if self.cups_served % 97 == 0 then
+    self.broken = true
+    self:say("Something went clunk.")
+  end
+
+  return { drink = drink, change = change }
+end
+
+function CoffeeMachine:refill()
+  for ingredient, limit in pairs(MAX) do
+    if ingredient ~= "banana" then
+      self.stock[ingredient] = limit
+    end
+  end
+  self:say("Refilled water, beans and milk.")
+end
+
+function CoffeeMachine:repair(technician)
+  if not self.broken then
+    self:say(technician .. " checked the machine: nothing to fix.")
+    return
+  end
+  self.broken = false
+  self:say(technician .. " fixed the machine with a paperclip.")
+end
+
+function CoffeeMachine:report()
+  local lines = {
+    "=== " .. self.name .. " report ===",
+    string.format("cups served: %d", self.cups_served),
+    string.format("cash: %.2f", self.cash),
+    string.format("bananas received: %d", self.bananas_received),
+  }
+  local names = {}
+  for ingredient in pairs(self.stock) do
+    table.insert(names, ingredient)
+  end
+  table.sort(names)
+  for _, ingredient in ipairs(names) do
+    table.insert(lines, string.format("  %-7s %5d", ingredient, self.stock[ingredient]))
+  end
+  return table.concat(lines, "\n")
+end
+
+-- A morning rush simulation.
+local function morning_rush(machine, monkeys)
+  local drinks = { "espresso", "double", "cappuccino", "latte", "banana_mix", "tea" }
+  for i, monkey in ipairs(monkeys) do
+    local drink = drinks[(i % #drinks) + 1]
+    local coins = (i % 3 == 0) and 0 or 3
+    local bananas = (coins == 0) and 6 or 0
+    machine:order(monkey, drink, coins, bananas)
+  end
+end
+
+local machine = CoffeeMachine.new("Canopy Brew")
+local monkeys = {}
+for i = 1, 40 do
+  monkeys[i] = "monkey_" .. i
+end
+
+morning_rush(machine, monkeys)
+machine:refill()
+morning_rush(machine, monkeys)
+machine:repair("Professor")
+print(machine:report())
+
+return CoffeeMachine

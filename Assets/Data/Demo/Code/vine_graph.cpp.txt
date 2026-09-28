@@ -1,0 +1,171 @@
+// vine_graph.cpp
+// Monkeys travel between desks by swinging on vines.
+// This program finds the fastest swing route with Dijkstra's algorithm
+// and detects desks that nobody can reach (usually the manager's).
+
+#include <algorithm>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <queue>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace jungle {
+
+struct Vine {
+    int to;
+    double seconds;
+    bool slippery;
+};
+
+class VineGraph {
+public:
+    explicit VineGraph(int desks) : edges_(desks) {}
+
+    void addVine(int from, int to, double seconds, bool slippery = false) {
+        edges_.at(from).push_back({to, seconds, slippery});
+        edges_.at(to).push_back({from, seconds, slippery});
+    }
+
+    int size() const { return static_cast<int>(edges_.size()); }
+
+    // Slippery vines are slower when the monkey carries bananas.
+    double cost(const Vine& vine, bool carryingBananas) const {
+        return vine.slippery && carryingBananas ? vine.seconds * 1.8 : vine.seconds;
+    }
+
+    std::vector<double> shortest(int start, bool carryingBananas,
+                                 std::vector<int>* previous = nullptr) const {
+        const double inf = std::numeric_limits<double>::infinity();
+        std::vector<double> dist(size(), inf);
+        std::vector<int> prev(size(), -1);
+        using Item = std::pair<double, int>;
+        std::priority_queue<Item, std::vector<Item>, std::greater<Item>> open;
+
+        dist[start] = 0.0;
+        open.push({0.0, start});
+        while (!open.empty()) {
+            auto [d, desk] = open.top();
+            open.pop();
+            if (d > dist[desk]) continue;
+            for (const Vine& vine : edges_[desk]) {
+                double candidate = d + cost(vine, carryingBananas);
+                if (candidate < dist[vine.to]) {
+                    dist[vine.to] = candidate;
+                    prev[vine.to] = desk;
+                    open.push({candidate, vine.to});
+                }
+            }
+        }
+        if (previous) *previous = std::move(prev);
+        return dist;
+    }
+
+    std::vector<int> route(int from, int to, bool carryingBananas) const {
+        std::vector<int> prev;
+        auto dist = shortest(from, carryingBananas, &prev);
+        std::vector<int> path;
+        if (dist[to] == std::numeric_limits<double>::infinity()) return path;
+        for (int at = to; at != -1; at = prev[at]) path.push_back(at);
+        std::reverse(path.begin(), path.end());
+        return path;
+    }
+
+    std::vector<int> unreachable(int from) const {
+        auto dist = shortest(from, false);
+        std::vector<int> result;
+        for (int desk = 0; desk < size(); ++desk) {
+            if (dist[desk] == std::numeric_limits<double>::infinity()) result.push_back(desk);
+        }
+        return result;
+    }
+
+    // Groups desks into islands connected by vines.
+    std::vector<std::vector<int>> islands() const {
+        std::vector<int> seen(size(), 0);
+        std::vector<std::vector<int>> groups;
+        for (int start = 0; start < size(); ++start) {
+            if (seen[start]) continue;
+            std::vector<int> group;
+            std::vector<int> stack{start};
+            seen[start] = 1;
+            while (!stack.empty()) {
+                int desk = stack.back();
+                stack.pop_back();
+                group.push_back(desk);
+                for (const Vine& vine : edges_[desk]) {
+                    if (!seen[vine.to]) {
+                        seen[vine.to] = 1;
+                        stack.push_back(vine.to);
+                    }
+                }
+            }
+            std::sort(group.begin(), group.end());
+            groups.push_back(std::move(group));
+        }
+        return groups;
+    }
+
+private:
+    std::vector<std::vector<Vine>> edges_;
+};
+
+std::string describe(const std::vector<int>& path, const std::map<int, std::string>& names) {
+    if (path.empty()) return "(no route)";
+    std::string text;
+    for (size_t i = 0; i < path.size(); ++i) {
+        auto it = names.find(path[i]);
+        text += it != names.end() ? it->second : "desk " + std::to_string(path[i]);
+        if (i + 1 < path.size()) text += " -> ";
+    }
+    return text;
+}
+
+}  // namespace jungle
+
+int main() {
+    using namespace jungle;
+
+    VineGraph office(10);
+    office.addVine(0, 1, 2.0);
+    office.addVine(1, 2, 1.5, true);
+    office.addVine(2, 3, 2.5);
+    office.addVine(0, 4, 4.0);
+    office.addVine(4, 3, 1.0, true);
+    office.addVine(3, 5, 3.0);
+    office.addVine(5, 6, 0.5);
+    office.addVine(6, 7, 2.0, true);
+    office.addVine(2, 7, 6.0);
+    // Desks 8 and 9 only reach each other: the manager's corner.
+    office.addVine(8, 9, 1.0);
+
+    std::map<int, std::string> names{
+        {0, "entrance"}, {3, "coffee"}, {5, "server room"}, {7, "banana storage"}, {9, "manager"}};
+
+    for (bool bananas : {false, true}) {
+        auto path = office.route(0, 7, bananas);
+        auto dist = office.shortest(0, bananas);
+        std::cout << (bananas ? "[with bananas] " : "[empty hands]  ")
+                  << describe(path, names) << "  (" << std::fixed << std::setprecision(1)
+                  << dist[7] << " s)\n";
+    }
+
+    std::cout << "Unreachable from the entrance:";
+    for (int desk : office.unreachable(0)) std::cout << ' ' << desk;
+    std::cout << '\n';
+
+    auto groups = office.islands();
+    std::cout << groups.size() << " islands\n";
+    for (const auto& group : groups) {
+        std::cout << "  {";
+        for (size_t i = 0; i < group.size(); ++i) {
+            std::cout << group[i] << (i + 1 < group.size() ? ", " : "");
+        }
+        std::cout << "}\n";
+    }
+    return 0;
+}

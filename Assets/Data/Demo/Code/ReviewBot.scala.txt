@@ -1,0 +1,155 @@
+// ReviewBot.scala
+// Automated code review for pull requests written by monkeys.
+// Each rule inspects the diff and leaves comments; the bot approves
+// only when nothing serious is found and the author brought bananas.
+
+package office.review
+
+import scala.util.matching.Regex
+
+final case class Line(number: Int, text: String)
+
+final case class PullRequest(
+  id: Int,
+  author: String,
+  title: String,
+  files: Map[String, Vector[Line]],
+  bananasOffered: Int
+)
+
+sealed trait Severity { def weight: Int }
+object Severity {
+  case object Info extends Severity { val weight = 0 }
+  case object Warning extends Severity { val weight = 1 }
+  case object Error extends Severity { val weight = 5 }
+}
+
+final case class Comment(file: String, line: Int, severity: Severity, message: String) {
+  override def toString: String = s"[$severity] $file:$line $message"
+}
+
+trait Rule {
+  def name: String
+  def check(file: String, lines: Vector[Line]): Seq[Comment]
+}
+
+object Rules {
+
+  private def matching(file: String, lines: Vector[Line], pattern: Regex, severity: Severity, message: String): Seq[Comment] =
+    lines.collect { case Line(n, text) if pattern.findFirstIn(text).isDefined => Comment(file, n, severity, message) }
+
+  val noBananaVariables: Rule = new Rule {
+    val name = "no-banana-names"
+    def check(file: String, lines: Vector[Line]): Seq[Comment] =
+      matching(file, lines, "\\b(banana\\d+|bnn|bananaa)\\b".r, Severity.Warning, "Please give variables real names.")
+  }
+
+  val lineLength: Rule = new Rule {
+    val name = "line-length"
+    def check(file: String, lines: Vector[Line]): Seq[Comment] =
+      lines.collect {
+        case Line(n, text) if text.length > 120 =>
+          Comment(file, n, Severity.Info, s"Line is ${text.length} characters; the monitor is not that wide.")
+      }
+  }
+
+  val noTodoWithoutName: Rule = new Rule {
+    val name = "todo-owner"
+    def check(file: String, lines: Vector[Line]): Seq[Comment] =
+      matching(file, lines, "TODO(?!\\()".r, Severity.Warning, "TODOs need an owner: TODO(monkey).")
+  }
+
+  val noShouting: Rule = new Rule {
+    val name = "no-shouting"
+    private val shout = "[A-Z]{12,}".r
+    def check(file: String, lines: Vector[Line]): Seq[Comment] =
+      lines.collect {
+        case Line(n, text) if !text.trim.startsWith("//") && shout.findFirstIn(text).isDefined =>
+          Comment(file, n, Severity.Info, "Consider typing with the caps lock off.")
+      }
+  }
+
+  val noSecrets: Rule = new Rule {
+    val name = "no-secrets"
+    def check(file: String, lines: Vector[Line]): Seq[Comment] =
+      matching(file, lines, "(?i)(password|secret_key|kitchen_code)\\s*=".r, Severity.Error,
+        "Never commit secrets. Especially not the kitchen code.")
+  }
+
+  val noInfiniteLoops: Rule = new Rule {
+    val name = "no-while-true"
+    def check(file: String, lines: Vector[Line]): Seq[Comment] =
+      matching(file, lines, "while\\s*\\(\\s*true\\s*\\)".r, Severity.Warning,
+        "Infinite loop detected. Are you trying to type forever?")
+  }
+
+  val magicNumbers: Rule = new Rule {
+    val name = "magic-numbers"
+    private val number = "(?<![\\w.])(\\d{3,})(?![\\w.])".r
+    private val allowed = Set("100", "1000")
+    def check(file: String, lines: Vector[Line]): Seq[Comment] =
+      for {
+        Line(n, text) <- lines
+        if !text.trim.startsWith("//")
+        found <- number.findAllIn(text).toSeq
+        if !allowed.contains(found)
+      } yield Comment(file, n, Severity.Info, s"Magic number $found: give it a name, like BANANAS_PER_CRATE.")
+  }
+
+  val all: Seq[Rule] =
+    Seq(noBananaVariables, lineLength, noTodoWithoutName, noShouting, noSecrets, noInfiniteLoops, magicNumbers)
+}
+
+final case class Review(pr: PullRequest, comments: Seq[Comment]) {
+  val score: Int = comments.map(_.severity.weight).sum
+  val approved: Boolean = !comments.exists(_.severity == Severity.Error) && score <= 3 && pr.bananasOffered > 0
+
+  def summary: String = {
+    val verdict = if (approved) "APPROVED" else "CHANGES REQUESTED"
+    val header = s"PR #${pr.id} '${pr.title}' by ${pr.author}: $verdict (score $score)"
+    (header +: comments.sortBy(c => (-c.severity.weight, c.file, c.line)).map("  " + _)).mkString("\n")
+  }
+}
+
+class ReviewBot(rules: Seq[Rule]) {
+  def review(pr: PullRequest): Review = {
+    val comments = for {
+      (file, lines) <- pr.files.toSeq
+      rule <- rules
+      comment <- rule.check(file, lines)
+    } yield comment
+    val bribe =
+      if (pr.bananasOffered == 0) Seq(Comment("-", 0, Severity.Info, "No bananas offered. The bot is disappointed."))
+      else Nil
+    Review(pr, comments ++ bribe)
+  }
+
+  def statistics(reviews: Seq[Review]): Map[String, Int] =
+    reviews.groupBy(_.pr.author).view.mapValues(_.count(_.approved)).toMap
+}
+
+object ReviewBotApp {
+  private def lines(text: String): Vector[Line] =
+    text.linesIterator.zipWithIndex.map { case (t, i) => Line(i + 1, t) }.toVector
+
+  def main(args: Array[String]): Unit = {
+    val prs = Seq(
+      PullRequest(1, "Bobo", "Add banana counter",
+        Map("Counter.scala" -> lines("val banana1 = 0\n// TODO count faster\nwhile (true) { }")), bananasOffered = 2),
+      PullRequest(2, "Professor", "Refactor office layout",
+        Map("Layout.scala" -> lines("final case class Desk(x: Int, y: Int)\n// TODO(Professor) add vines")), bananasOffered = 1),
+      PullRequest(3, "Koko", "Quick fix",
+        Map("Kitchen.scala" -> lines("val kitchen_code = \"1234\"\nprintln(\"OPENINGTHEFRIDGE\")")), bananasOffered = 0)
+    )
+
+    val bot = new ReviewBot(Rules.all)
+    val reviews = prs.map(bot.review)
+    reviews.foreach(r => println(r.summary + "\n"))
+    println("Approvals per monkey: " + bot.statistics(reviews))
+
+    val cleanest = reviews.minBy(_.score)
+    println(s"Cleanest pull request: #${cleanest.pr.id} by ${cleanest.pr.author} (score ${cleanest.score})")
+    val bananas = prs.map(_.bananasOffered).sum
+    println(s"Bananas collected by the bot today: $bananas")
+  }
+}

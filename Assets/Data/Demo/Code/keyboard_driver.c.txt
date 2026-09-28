@@ -1,0 +1,206 @@
+/*
+ * keyboard_driver.c
+ * A tiny, very forgiving keyboard driver for monkey hands.
+ * Handles sticky keys, banana residue and enthusiastic double presses.
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+
+#define KEY_COUNT        104
+#define QUEUE_SIZE       256
+#define DEBOUNCE_MS      12
+#define STICKY_LIMIT_MS  800
+#define BANANA_THRESHOLD 40
+
+typedef enum {
+    KEY_UP = 0,
+    KEY_DOWN = 1,
+    KEY_STUCK = 2
+} key_state_t;
+
+typedef struct {
+    uint8_t     code;
+    key_state_t state;
+    uint32_t    last_change_ms;
+    uint16_t    press_count;
+    uint8_t     residue;       /* 0..100, how sticky the key has become */
+} key_t;
+
+typedef struct {
+    uint8_t  codes[QUEUE_SIZE];
+    uint16_t head;
+    uint16_t tail;
+} event_queue_t;
+
+static key_t          keys[KEY_COUNT];
+static event_queue_t  queue;
+static uint32_t       now_ms;
+static uint32_t       dropped_events;
+
+/* ------------------------------------------------------------------ queue */
+
+static bool queue_push(uint8_t code)
+{
+    uint16_t next = (uint16_t)((queue.head + 1) % QUEUE_SIZE);
+    if (next == queue.tail) {
+        dropped_events++;
+        return false;
+    }
+    queue.codes[queue.head] = code;
+    queue.head = next;
+    return true;
+}
+
+static bool queue_pop(uint8_t *code)
+{
+    if (queue.head == queue.tail) {
+        return false;
+    }
+    *code = queue.codes[queue.tail];
+    queue.tail = (uint16_t)((queue.tail + 1) % QUEUE_SIZE);
+    return true;
+}
+
+/* ------------------------------------------------------------------ keys */
+
+void keyboard_init(void)
+{
+    memset(keys, 0, sizeof(keys));
+    memset(&queue, 0, sizeof(queue));
+    for (int i = 0; i < KEY_COUNT; i++) {
+        keys[i].code = (uint8_t)i;
+    }
+    now_ms = 0;
+    dropped_events = 0;
+}
+
+static bool debounced(const key_t *key)
+{
+    return now_ms - key->last_change_ms >= DEBOUNCE_MS;
+}
+
+void keyboard_on_press(uint8_t code)
+{
+    if (code >= KEY_COUNT) {
+        return;
+    }
+    key_t *key = &keys[code];
+    if (key->state != KEY_UP || !debounced(key)) {
+        return;
+    }
+    key->state = KEY_DOWN;
+    key->last_change_ms = now_ms;
+    key->press_count++;
+    queue_push(code);
+
+    /* Every hundred presses leaves a little banana on the key. */
+    if (key->press_count % 100 == 0 && key->residue < 100) {
+        key->residue += 5;
+    }
+}
+
+void keyboard_on_release(uint8_t code)
+{
+    if (code >= KEY_COUNT) {
+        return;
+    }
+    key_t *key = &keys[code];
+    if (key->state == KEY_UP || !debounced(key)) {
+        return;
+    }
+    /* A very sticky key refuses to come back up. */
+    if (key->residue > BANANA_THRESHOLD && (now_ms & 3) == 0) {
+        key->state = KEY_STUCK;
+        return;
+    }
+    key->state = KEY_UP;
+    key->last_change_ms = now_ms;
+}
+
+void keyboard_tick(uint32_t elapsed_ms)
+{
+    now_ms += elapsed_ms;
+    for (int i = 0; i < KEY_COUNT; i++) {
+        key_t *key = &keys[i];
+        if (key->state == KEY_STUCK && now_ms - key->last_change_ms > STICKY_LIMIT_MS) {
+            /* Stuck keys auto-repeat, just like real monkey keyboards. */
+            queue_push(key->code);
+            key->last_change_ms = now_ms;
+        }
+    }
+}
+
+void keyboard_clean(void)
+{
+    for (int i = 0; i < KEY_COUNT; i++) {
+        keys[i].residue = 0;
+        if (keys[i].state == KEY_STUCK) {
+            keys[i].state = KEY_UP;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ translation */
+
+static char translate(uint8_t code)
+{
+    static const char layout[] =
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789"
+        " \n\t.,;:!?-_=+()[]{}<>/\\'\"";
+    if (code < sizeof(layout) - 1) {
+        return layout[code];
+    }
+    return '?';
+}
+
+size_t keyboard_read(char *buffer, size_t capacity)
+{
+    size_t written = 0;
+    uint8_t code;
+    while (written + 1 < capacity && queue_pop(&code)) {
+        buffer[written++] = translate(code);
+    }
+    buffer[written] = '\0';
+    return written;
+}
+
+/* ------------------------------------------------------------------ diagnostics */
+
+void keyboard_report(FILE *out)
+{
+    uint32_t total = 0;
+    int dirtiest = 0;
+    for (int i = 0; i < KEY_COUNT; i++) {
+        total += keys[i].press_count;
+        if (keys[i].residue > keys[dirtiest].residue) {
+            dirtiest = i;
+        }
+    }
+    fprintf(out, "presses: %u\n", total);
+    fprintf(out, "dropped: %u\n", dropped_events);
+    fprintf(out, "dirtiest key: '%c' (%u%% banana)\n", translate((uint8_t)dirtiest), keys[dirtiest].residue);
+}
+
+#ifdef KEYBOARD_SELF_TEST
+int main(void)
+{
+    char text[64];
+    keyboard_init();
+    for (int i = 0; i < 500; i++) {
+        uint8_t code = (uint8_t)((i * 7) % 26);
+        keyboard_on_press(code);
+        keyboard_tick(15);
+        keyboard_on_release(code);
+        keyboard_tick(15);
+    }
+    keyboard_read(text, sizeof(text));
+    printf("typed: %s\n", text);
+    keyboard_report(stdout);
+    keyboard_clean();
+    return 0;
+}
+#endif

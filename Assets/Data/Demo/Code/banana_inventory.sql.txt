@@ -1,0 +1,176 @@
+-- ============================================================
+--  Banana inventory for the Thousand Monkeys Software Company
+--  Schema, seed data and the reports the finance ape asked for
+-- ============================================================
+
+CREATE TABLE warehouses (
+    id           SERIAL PRIMARY KEY,
+    name         VARCHAR(64) NOT NULL UNIQUE,
+    city         VARCHAR(64) NOT NULL,
+    capacity_kg  INTEGER     NOT NULL CHECK (capacity_kg > 0),
+    opened_at    DATE        NOT NULL DEFAULT CURRENT_DATE
+);
+
+CREATE TABLE suppliers (
+    id           SERIAL PRIMARY KEY,
+    name         VARCHAR(80) NOT NULL,
+    country      VARCHAR(40) NOT NULL,
+    rating       NUMERIC(3, 2) NOT NULL DEFAULT 3.00,
+    is_organic   BOOLEAN     NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE banana_batches (
+    id             SERIAL PRIMARY KEY,
+    supplier_id    INTEGER     NOT NULL REFERENCES suppliers (id),
+    warehouse_id   INTEGER     NOT NULL REFERENCES warehouses (id),
+    received_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
+    weight_kg      NUMERIC(8, 2) NOT NULL,
+    ripeness       SMALLINT    NOT NULL CHECK (ripeness BETWEEN 1 AND 7),
+    price_per_kg   NUMERIC(6, 2) NOT NULL
+);
+
+CREATE TABLE monkeys (
+    id             SERIAL PRIMARY KEY,
+    nickname       VARCHAR(40) NOT NULL,
+    level          SMALLINT    NOT NULL DEFAULT 1,
+    desk_number    INTEGER     UNIQUE,
+    hired_at       DATE        NOT NULL DEFAULT CURRENT_DATE,
+    favourite_food VARCHAR(40) NOT NULL DEFAULT 'banana'
+);
+
+CREATE TABLE rations (
+    id             SERIAL PRIMARY KEY,
+    monkey_id      INTEGER     NOT NULL REFERENCES monkeys (id),
+    batch_id       INTEGER     NOT NULL REFERENCES banana_batches (id),
+    served_at      TIMESTAMP   NOT NULL DEFAULT NOW(),
+    bananas        SMALLINT    NOT NULL CHECK (bananas > 0),
+    lines_written  INTEGER     NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_rations_monkey ON rations (monkey_id, served_at);
+CREATE INDEX idx_batches_ripeness ON banana_batches (ripeness);
+
+-- ------------------------------------------------------------
+--  Seed data
+-- ------------------------------------------------------------
+
+INSERT INTO warehouses (name, city, capacity_kg) VALUES
+    ('Canopy Central', 'Jungleton', 12000),
+    ('River Dock', 'Vine Harbor', 8000),
+    ('Cold Room B', 'Jungleton', 2500);
+
+INSERT INTO suppliers (name, country, rating, is_organic) VALUES
+    ('Golden Peel Ltd', 'Ecuador', 4.60, TRUE),
+    ('Yellow Curve Co', 'Costa Rica', 4.10, FALSE),
+    ('Mushy Deals', 'Nowhere', 1.90, FALSE),
+    ('Plantain Brothers', 'Colombia', 3.80, TRUE);
+
+INSERT INTO monkeys (nickname, level, desk_number) VALUES
+    ('Bobo', 3, 1),
+    ('Koko', 1, 2),
+    ('Momo', 7, 3),
+    ('Chip', 2, 4),
+    ('Dale', 2, 5),
+    ('Professor', 12, 6);
+
+INSERT INTO banana_batches (supplier_id, warehouse_id, weight_kg, ripeness, price_per_kg) VALUES
+    (1, 1, 540.00, 3, 1.35),
+    (2, 1, 320.50, 5, 0.95),
+    (3, 2, 900.00, 7, 0.20),
+    (4, 3, 150.25, 2, 1.80),
+    (1, 2, 610.00, 4, 1.30);
+
+-- ------------------------------------------------------------
+--  Views
+-- ------------------------------------------------------------
+
+CREATE VIEW ripe_stock AS
+SELECT w.name                  AS warehouse,
+       SUM(b.weight_kg)        AS ripe_kg,
+       ROUND(AVG(b.price_per_kg), 2) AS avg_price
+FROM banana_batches b
+JOIN warehouses w ON w.id = b.warehouse_id
+WHERE b.ripeness BETWEEN 3 AND 5
+GROUP BY w.name;
+
+CREATE VIEW monkey_productivity AS
+SELECT m.nickname,
+       m.level,
+       COUNT(r.id)                            AS meals,
+       COALESCE(SUM(r.bananas), 0)            AS bananas_eaten,
+       COALESCE(SUM(r.lines_written), 0)      AS lines_written,
+       CASE
+           WHEN COALESCE(SUM(r.bananas), 0) = 0 THEN 0
+           ELSE ROUND(SUM(r.lines_written)::NUMERIC / SUM(r.bananas), 2)
+       END                                    AS lines_per_banana
+FROM monkeys m
+LEFT JOIN rations r ON r.monkey_id = m.id
+GROUP BY m.id, m.nickname, m.level;
+
+-- ------------------------------------------------------------
+--  Reports
+-- ------------------------------------------------------------
+
+-- 1. Which warehouse is about to overflow?
+SELECT w.name,
+       w.capacity_kg,
+       COALESCE(SUM(b.weight_kg), 0) AS stored_kg,
+       ROUND(100.0 * COALESCE(SUM(b.weight_kg), 0) / w.capacity_kg, 1) AS fill_percent
+FROM warehouses w
+LEFT JOIN banana_batches b ON b.warehouse_id = w.id
+GROUP BY w.id
+ORDER BY fill_percent DESC;
+
+-- 2. Top five most productive monkeys this month
+SELECT nickname, lines_written, lines_per_banana
+FROM monkey_productivity
+WHERE lines_written > 0
+ORDER BY lines_per_banana DESC, lines_written DESC
+LIMIT 5;
+
+-- 3. Suppliers we should stop buying from
+SELECT s.name,
+       s.rating,
+       AVG(b.ripeness) AS avg_ripeness_on_arrival
+FROM suppliers s
+JOIN banana_batches b ON b.supplier_id = s.id
+GROUP BY s.id
+HAVING AVG(b.ripeness) > 5 OR s.rating < 2.5;
+
+-- 4. Daily banana burn rate
+SELECT DATE_TRUNC('day', served_at) AS day,
+       SUM(bananas)                 AS bananas,
+       SUM(lines_written)           AS lines
+FROM rations
+GROUP BY 1
+ORDER BY 1;
+
+-- ------------------------------------------------------------
+--  Maintenance
+-- ------------------------------------------------------------
+
+-- Throw away batches that became banana bread.
+DELETE FROM banana_batches
+WHERE ripeness = 7
+  AND received_at < NOW() - INTERVAL '10 days';
+
+-- Promote monkeys that earned it.
+UPDATE monkeys m
+SET level = level + 1
+FROM monkey_productivity p
+WHERE p.nickname = m.nickname
+  AND p.lines_per_banana > 50
+  AND m.level < 20;
+
+-- Serve lunch: every monkey gets bananas from the ripest good batch.
+INSERT INTO rations (monkey_id, batch_id, bananas)
+SELECT m.id,
+       (SELECT b.id
+        FROM banana_batches b
+        WHERE b.ripeness BETWEEN 3 AND 5
+        ORDER BY b.ripeness DESC, b.received_at
+        LIMIT 1),
+       LEAST(2 + m.level / 4, 6)
+FROM monkeys m;
+
+-- End of script. Remember: no bananas on the keyboards.

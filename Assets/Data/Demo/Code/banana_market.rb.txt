@@ -1,0 +1,166 @@
+# banana_market.rb
+# An internal stock exchange where monkeys trade bananas for keyboard time.
+# Prices follow supply and demand; the Professor keeps cornering the market.
+
+require "json"
+
+module Jungle
+  class InsufficientFunds < StandardError; end
+  class UnknownTrader < StandardError; end
+
+  Order = Struct.new(:id, :trader, :side, :quantity, :price, :created_at) do
+    def buy?
+      side == :buy
+    end
+
+    def to_h
+      { id: id, trader: trader, side: side, quantity: quantity, price: price }
+    end
+  end
+
+  Trade = Struct.new(:buyer, :seller, :quantity, :price) do
+    def total
+      quantity * price
+    end
+  end
+
+  class Trader
+    attr_reader :name, :bananas, :minutes
+
+    def initialize(name, bananas:, minutes:)
+      @name = name
+      @bananas = bananas
+      @minutes = minutes
+    end
+
+    def reserve!(side, quantity, price)
+      if side == :buy
+        cost = quantity * price
+        raise InsufficientFunds, "#{name} has #{minutes} minutes, needs #{cost}" if cost > minutes
+      elsif quantity > bananas
+        raise InsufficientFunds, "#{name} has only #{bananas} bananas"
+      end
+    end
+
+    def settle!(side, quantity, price)
+      if side == :buy
+        @bananas += quantity
+        @minutes -= quantity * price
+      else
+        @bananas -= quantity
+        @minutes += quantity * price
+      end
+    end
+
+    def to_s
+      format("%-10s %4d bananas %6d minutes", name, bananas, minutes)
+    end
+  end
+
+  class Market
+    attr_reader :trades
+
+    def initialize
+      @traders = {}
+      @bids = []
+      @asks = []
+      @trades = []
+      @next_id = 1
+    end
+
+    def register(trader)
+      @traders[trader.name] = trader
+    end
+
+    def trader(name)
+      @traders.fetch(name) { raise UnknownTrader, name }
+    end
+
+    def place(name, side, quantity, price)
+      trader(name).reserve!(side, quantity, price)
+      order = Order.new(@next_id, name, side, quantity, price, Time.now)
+      @next_id += 1
+      book = order.buy? ? @bids : @asks
+      book << order
+      sort_books!
+      match!
+      order
+    end
+
+    def sort_books!
+      @bids.sort_by! { |o| [-o.price, o.created_at] }
+      @asks.sort_by! { |o| [o.price, o.created_at] }
+    end
+
+    def match!
+      while (bid = @bids.first) && (ask = @asks.first) && bid.price >= ask.price
+        quantity = [bid.quantity, ask.quantity].min
+        price = ask.price
+        execute(bid, ask, quantity, price)
+        bid.quantity -= quantity
+        ask.quantity -= quantity
+        @bids.shift if bid.quantity.zero?
+        @asks.shift if ask.quantity.zero?
+      end
+    end
+
+    def execute(bid, ask, quantity, price)
+      trader(bid.trader).settle!(:buy, quantity, price)
+      trader(ask.trader).settle!(:sell, quantity, price)
+      @trades << Trade.new(bid.trader, ask.trader, quantity, price)
+    end
+
+    def last_price
+      @trades.last&.price
+    end
+
+    def spread
+      return nil if @bids.empty? || @asks.empty?
+
+      @asks.first.price - @bids.first.price
+    end
+
+    def volume
+      @trades.sum(&:quantity)
+    end
+
+    def order_book
+      {
+        bids: @bids.map(&:to_h),
+        asks: @asks.map(&:to_h),
+        last_price: last_price,
+        spread: spread
+      }
+    end
+
+    def leaderboard
+      @traders.values.sort_by { |t| -(t.bananas * (last_price || 1) + t.minutes) }
+    end
+  end
+end
+
+market = Jungle::Market.new
+%w[Bobo Koko Momo Chip].each_with_index do |name, i|
+  market.register(Jungle::Trader.new(name, bananas: 20 + i * 5, minutes: 100 + i * 20))
+end
+market.register(Jungle::Trader.new("Professor", bananas: 5, minutes: 1_000))
+
+market.place("Bobo", :sell, 10, 4)
+market.place("Koko", :sell, 5, 3)
+market.place("Momo", :buy, 8, 4)
+market.place("Professor", :buy, 20, 5)
+market.place("Chip", :sell, 15, 6)
+
+begin
+  market.place("Koko", :buy, 500, 10)
+rescue Jungle::InsufficientFunds => e
+  puts "Rejected: #{e.message}"
+end
+
+puts JSON.pretty_generate(market.order_book)
+puts "Volume: #{market.volume} bananas"
+market.trades.each do |t|
+  puts "#{t.seller} -> #{t.buyer}: #{t.quantity} @ #{t.price} (#{t.total} minutes)"
+end
+puts
+market.leaderboard.each { |trader| puts trader }

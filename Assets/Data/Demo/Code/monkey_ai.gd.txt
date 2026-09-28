@@ -1,0 +1,160 @@
+# monkey_ai.gd
+# Godot 4 controller for a monkey NPC in the office side project
+# "Monkey Office Simulator". Uses a simple state machine with timers.
+extends CharacterBody2D
+class_name OfficeMonkey
+
+signal wrote_code(lines: int)
+signal found_banana(position: Vector2)
+signal fell_asleep
+
+enum State { IDLE, WALK_TO_DESK, TYPE, WALK_TO_KITCHEN, EAT, SLEEP, PANIC }
+
+@export var walk_speed: float = 90.0
+@export var typing_speed: float = 1.5  # lines per second
+@export var max_energy: float = 100.0
+@export var desk: Node2D
+@export var kitchen: Node2D
+
+var state: State = State.IDLE
+var energy: float = 100.0
+var hunger: float = 0.0
+var lines_today: int = 0
+var _state_time: float = 0.0
+var _typing_buffer: float = 0.0
+var _target: Vector2 = Vector2.ZERO
+
+@onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
+@onready var bubble: Label = $SpeechBubble
+
+
+func _ready() -> void:
+	energy = max_energy
+	bubble.visible = false
+	_enter(State.IDLE)
+
+
+func _physics_process(delta: float) -> void:
+	_state_time += delta
+	hunger = min(hunger + delta * 1.5, 100.0)
+
+	match state:
+		State.IDLE:
+			if _state_time > 1.0:
+				_enter(State.WALK_TO_DESK)
+		State.WALK_TO_DESK:
+			if _move_towards(_target, delta):
+				_enter(State.TYPE)
+		State.TYPE:
+			_type(delta)
+		State.WALK_TO_KITCHEN:
+			if _move_towards(_target, delta):
+				_enter(State.EAT)
+		State.EAT:
+			hunger = max(hunger - delta * 25.0, 0.0)
+			energy = min(energy + delta * 5.0, max_energy)
+			if hunger <= 0.0:
+				_enter(State.WALK_TO_DESK)
+		State.SLEEP:
+			energy = min(energy + delta * 20.0, max_energy)
+			if energy >= max_energy * 0.9:
+				_say("Refreshed!")
+				_enter(State.WALK_TO_DESK)
+		State.PANIC:
+			velocity = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * walk_speed * 2.0
+			move_and_slide()
+			if _state_time > 2.0:
+				_enter(State.WALK_TO_KITCHEN)
+
+
+func _enter(new_state: State) -> void:
+	state = new_state
+	_state_time = 0.0
+	match new_state:
+		State.IDLE:
+			sprite.play("idle")
+		State.WALK_TO_DESK:
+			_target = desk.global_position if desk else global_position
+			sprite.play("walk")
+		State.TYPE:
+			sprite.play("type")
+		State.WALK_TO_KITCHEN:
+			_target = kitchen.global_position if kitchen else global_position
+			sprite.play("walk")
+			_say("Banana time.")
+		State.EAT:
+			sprite.play("eat")
+			found_banana.emit(global_position)
+		State.SLEEP:
+			sprite.play("sleep")
+			fell_asleep.emit()
+			_say("Zzz...")
+		State.PANIC:
+			sprite.play("panic")
+			_say("OOK OOK!")
+
+
+func _move_towards(target: Vector2, delta: float) -> bool:
+	var offset := target - global_position
+	if offset.length() < 4.0:
+		velocity = Vector2.ZERO
+		return true
+	velocity = offset.normalized() * walk_speed
+	sprite.flip_h = velocity.x < 0.0
+	move_and_slide()
+	energy = max(energy - delta * 0.5, 0.0)
+	return false
+
+
+func _type(delta: float) -> void:
+	energy = max(energy - delta * 3.0, 0.0)
+	_typing_buffer += typing_speed * delta * _efficiency()
+	if _typing_buffer >= 1.0:
+		var lines := int(_typing_buffer)
+		_typing_buffer -= lines
+		lines_today += lines
+		wrote_code.emit(lines)
+
+	if hunger > 80.0:
+		_enter(State.PANIC if hunger > 95.0 else State.WALK_TO_KITCHEN)
+	elif energy < max_energy * 0.15:
+		_enter(State.SLEEP)
+
+
+func _efficiency() -> float:
+	# Tired or hungry monkeys type slower; a full, rested monkey types at 120 %.
+	var rest := energy / max_energy
+	var food := 1.0 - hunger / 100.0
+	return clamp(0.2 + rest * 0.6 + food * 0.4, 0.2, 1.2)
+
+
+func _say(text: String) -> void:
+	bubble.text = text
+	bubble.visible = true
+	bubble.modulate.a = 1.0
+	var tween := create_tween()
+	tween.tween_interval(1.2)
+	tween.tween_property(bubble, "modulate:a", 0.0, 0.4)
+	tween.tween_callback(func(): bubble.visible = false)
+
+
+func report() -> Dictionary:
+	return {
+		"state": State.keys()[state],
+		"energy": snappedf(energy, 0.1),
+		"hunger": snappedf(hunger, 0.1),
+		"lines_today": lines_today,
+	}
+
+
+func _on_banana_delivery(amount: int) -> void:
+	# Bananas delivered straight to the desk: eat without leaving.
+	hunger = max(hunger - amount * 20.0, 0.0)
+	_say("Thanks! x%d" % amount)
+
+
+func _on_manager_nearby() -> void:
+	if state == State.SLEEP:
+		energy = max_energy * 0.5
+		_say("I was debugging with my eyes closed.")
+		_enter(State.TYPE)

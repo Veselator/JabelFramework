@@ -1,0 +1,194 @@
+package com.thousandmonkeys.office;
+
+import java.time.Duration;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.PriorityQueue;
+
+/**
+ * Plans the working day of every monkey in the office.
+ * Shifts, coffee breaks, banana breaks and the dreaded stand-up meeting.
+ */
+public final class MonkeyScheduler {
+
+    public enum Activity {
+        TYPING,
+        BANANA_BREAK,
+        COFFEE_BREAK,
+        STANDUP,
+        NAP,
+        CODE_REVIEW
+    }
+
+    public static final class Slot {
+        private final LocalTime start;
+        private final Duration length;
+        private final Activity activity;
+
+        public Slot(LocalTime start, Duration length, Activity activity) {
+            this.start = start;
+            this.length = length;
+            this.activity = activity;
+        }
+
+        public LocalTime start() { return start; }
+        public LocalTime end() { return start.plus(length); }
+        public Activity activity() { return activity; }
+
+        public boolean overlaps(Slot other) {
+            return start.isBefore(other.end()) && other.start.isBefore(end());
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s-%s %s", start, end(), activity);
+        }
+    }
+
+    public static final class Monkey {
+        private final String name;
+        private final int level;
+        private final double stamina;
+
+        public Monkey(String name, int level, double stamina) {
+            this.name = name;
+            this.level = level;
+            this.stamina = stamina;
+        }
+
+        public String name() { return name; }
+        public int level() { return level; }
+        public double stamina() { return stamina; }
+    }
+
+    private static final LocalTime DAY_START = LocalTime.of(9, 0);
+    private static final LocalTime DAY_END = LocalTime.of(18, 0);
+    private static final Duration STANDUP = Duration.ofMinutes(15);
+
+    private final Map<Activity, Duration> defaultLengths = new EnumMap<>(Activity.class);
+    private final List<Monkey> monkeys = new ArrayList<>();
+
+    public MonkeyScheduler() {
+        defaultLengths.put(Activity.TYPING, Duration.ofMinutes(50));
+        defaultLengths.put(Activity.BANANA_BREAK, Duration.ofMinutes(10));
+        defaultLengths.put(Activity.COFFEE_BREAK, Duration.ofMinutes(5));
+        defaultLengths.put(Activity.STANDUP, STANDUP);
+        defaultLengths.put(Activity.NAP, Duration.ofMinutes(20));
+        defaultLengths.put(Activity.CODE_REVIEW, Duration.ofMinutes(30));
+    }
+
+    public void hire(Monkey monkey) {
+        if (monkeys.size() >= 1000) {
+            throw new IllegalStateException("The office is full: the theorem has enough monkeys.");
+        }
+        monkeys.add(monkey);
+    }
+
+    /** Builds a full-day schedule for one monkey. */
+    public List<Slot> planDay(Monkey monkey) {
+        List<Slot> plan = new ArrayList<>();
+        LocalTime cursor = DAY_START;
+
+        plan.add(new Slot(cursor, STANDUP, Activity.STANDUP));
+        cursor = cursor.plus(STANDUP);
+
+        int typingBlocks = 0;
+        while (cursor.isBefore(DAY_END)) {
+            Activity next = chooseNext(monkey, typingBlocks, cursor);
+            Duration length = lengthFor(monkey, next);
+            if (cursor.plus(length).isAfter(DAY_END)) {
+                length = Duration.between(cursor, DAY_END);
+            }
+            plan.add(new Slot(cursor, length, next));
+            cursor = cursor.plus(length);
+            if (next == Activity.TYPING) {
+                typingBlocks++;
+            }
+        }
+        return plan;
+    }
+
+    private Activity chooseNext(Monkey monkey, int typingBlocks, LocalTime time) {
+        if (time.getHour() == 13 && time.getMinute() < 30) {
+            return Activity.BANANA_BREAK;
+        }
+        if (typingBlocks > 0 && typingBlocks % 3 == 0) {
+            return monkey.stamina() < 0.5 ? Activity.NAP : Activity.COFFEE_BREAK;
+        }
+        if (monkey.level() >= 10 && time.getHour() == 16) {
+            return Activity.CODE_REVIEW;
+        }
+        return Activity.TYPING;
+    }
+
+    private Duration lengthFor(Monkey monkey, Activity activity) {
+        Duration base = defaultLengths.get(activity);
+        if (activity == Activity.TYPING) {
+            // Senior monkeys focus longer.
+            long bonus = Math.min(monkey.level() * 2L, 30L);
+            return base.plusMinutes(bonus);
+        }
+        return base;
+    }
+
+    /** Minutes of pure typing in a planned day. */
+    public static long typingMinutes(List<Slot> plan) {
+        return plan.stream()
+                .filter(s -> s.activity() == Activity.TYPING)
+                .mapToLong(s -> Duration.between(s.start(), s.end()).toMinutes())
+                .sum();
+    }
+
+    /** Finds the monkey that types the most during a day. */
+    public Optional<Monkey> mostProductive() {
+        return monkeys.stream()
+                .max(Comparator.comparingLong(m -> typingMinutes(planDay(m))));
+    }
+
+    /** Detects overlapping slots, which would mean a monkey is in two places at once. */
+    public static List<String> validate(List<Slot> plan) {
+        List<String> problems = new ArrayList<>();
+        for (int i = 0; i < plan.size(); i++) {
+            for (int j = i + 1; j < plan.size(); j++) {
+                if (plan.get(i).overlaps(plan.get(j))) {
+                    problems.add("Overlap: " + plan.get(i) + " and " + plan.get(j));
+                }
+            }
+        }
+        return problems;
+    }
+
+    /** Orders monkeys for the coffee machine queue: the most tired go first. */
+    public List<Monkey> coffeeQueue() {
+        PriorityQueue<Monkey> queue = new PriorityQueue<>(Comparator.comparingDouble(Monkey::stamina));
+        queue.addAll(monkeys);
+        List<Monkey> result = new ArrayList<>();
+        while (!queue.isEmpty()) {
+            result.add(queue.poll());
+        }
+        return result;
+    }
+
+    public static void main(String[] args) {
+        MonkeyScheduler scheduler = new MonkeyScheduler();
+        scheduler.hire(new Monkey("Bobo", 3, 0.8));
+        scheduler.hire(new Monkey("Koko", 1, 0.3));
+        scheduler.hire(new Monkey("Professor", 12, 0.6));
+
+        for (Monkey monkey : scheduler.monkeys) {
+            List<Slot> plan = scheduler.planDay(monkey);
+            System.out.println("== " + monkey.name() + " ==");
+            plan.forEach(slot -> System.out.println("  " + slot));
+            System.out.println("  typing minutes: " + typingMinutes(plan));
+            validate(plan).forEach(problem -> System.out.println("  !! " + problem));
+        }
+
+        scheduler.mostProductive()
+                .ifPresent(m -> System.out.println("Employee of the day: " + m.name()));
+    }
+}

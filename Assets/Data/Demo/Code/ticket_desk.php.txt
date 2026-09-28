@@ -1,0 +1,201 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * ticket_desk.php
+ * The IT help desk for the monkey office. Tickets come in with
+ * descriptions like "keyboard sticky" and "screen eaten". This service
+ * triages them, assigns a technician and keeps an eye on the SLA.
+ */
+
+namespace Office\HelpDesk;
+
+use DateInterval;
+use DateTimeImmutable;
+use InvalidArgumentException;
+
+enum Priority: int
+{
+    case Low = 1;
+    case Normal = 2;
+    case High = 3;
+    case Banana = 4; // the kitchen is out of bananas: drop everything
+
+    public function slaHours(): int
+    {
+        return match ($this) {
+            Priority::Low => 72,
+            Priority::Normal => 24,
+            Priority::High => 4,
+            Priority::Banana => 1,
+        };
+    }
+}
+
+enum Status: string
+{
+    case Open = 'open';
+    case InProgress = 'in_progress';
+    case Resolved = 'resolved';
+}
+
+final class Ticket
+{
+    public Status $status = Status::Open;
+    public ?string $assignee = null;
+    public ?DateTimeImmutable $resolvedAt = null;
+    /** @var string[] */
+    public array $comments = [];
+
+    public function __construct(
+        public readonly int $id,
+        public readonly string $reporter,
+        public readonly string $description,
+        public readonly Priority $priority,
+        public readonly DateTimeImmutable $createdAt,
+    ) {
+    }
+
+    public function deadline(): DateTimeImmutable
+    {
+        return $this->createdAt->add(new DateInterval('PT' . $this->priority->slaHours() . 'H'));
+    }
+
+    public function isOverdue(DateTimeImmutable $now): bool
+    {
+        return $this->status !== Status::Resolved && $now > $this->deadline();
+    }
+}
+
+final class Technician
+{
+    public int $load = 0;
+
+    /** @param string[] $skills */
+    public function __construct(
+        public readonly string $name,
+        public readonly array $skills,
+    ) {
+    }
+
+    public function canFix(string $description): bool
+    {
+        foreach ($this->skills as $skill) {
+            if (str_contains(strtolower($description), $skill)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+final class TicketDesk
+{
+    /** @var array<int, Ticket> */
+    private array $tickets = [];
+    /** @var Technician[] */
+    private array $technicians = [];
+    private int $nextId = 1;
+
+    private const KEYWORDS = [
+        'banana' => Priority::Banana,
+        'server' => Priority::High,
+        'screen' => Priority::High,
+        'keyboard' => Priority::Normal,
+        'mouse' => Priority::Low,
+    ];
+
+    public function hire(Technician $technician): void
+    {
+        $this->technicians[] = $technician;
+    }
+
+    public function triage(string $description): Priority
+    {
+        $best = Priority::Low;
+        foreach (self::KEYWORDS as $word => $priority) {
+            if (str_contains(strtolower($description), $word) && $priority->value > $best->value) {
+                $best = $priority;
+            }
+        }
+        return $best;
+    }
+
+    public function open(string $reporter, string $description, ?DateTimeImmutable $at = null): Ticket
+    {
+        if (trim($description) === '') {
+            throw new InvalidArgumentException('Please describe the problem, even if it is "ook".');
+        }
+        $ticket = new Ticket($this->nextId++, $reporter, $description, $this->triage($description), $at ?? new DateTimeImmutable());
+        $this->tickets[$ticket->id] = $ticket;
+        $this->assign($ticket);
+        return $ticket;
+    }
+
+    private function assign(Ticket $ticket): void
+    {
+        $candidates = array_filter($this->technicians, fn (Technician $t) => $t->canFix($ticket->description));
+        if ($candidates === []) {
+            $candidates = $this->technicians;
+        }
+        usort($candidates, fn (Technician $a, Technician $b) => $a->load <=> $b->load);
+        $chosen = $candidates[0] ?? null;
+        if ($chosen !== null) {
+            $chosen->load++;
+            $ticket->assignee = $chosen->name;
+            $ticket->status = Status::InProgress;
+        }
+    }
+
+    public function resolve(int $id, string $comment, ?DateTimeImmutable $at = null): void
+    {
+        $ticket = $this->tickets[$id] ?? throw new InvalidArgumentException("No ticket #$id");
+        $ticket->status = Status::Resolved;
+        $ticket->resolvedAt = $at ?? new DateTimeImmutable();
+        $ticket->comments[] = $comment;
+        foreach ($this->technicians as $technician) {
+            if ($technician->name === $ticket->assignee) {
+                $technician->load--;
+            }
+        }
+    }
+
+    /** @return Ticket[] */
+    public function overdue(DateTimeImmutable $now): array
+    {
+        return array_values(array_filter($this->tickets, fn (Ticket $t) => $t->isOverdue($now)));
+    }
+
+    public function report(DateTimeImmutable $now): string
+    {
+        $lines = [];
+        foreach ($this->tickets as $ticket) {
+            $flag = $ticket->isOverdue($now) ? ' !! OVERDUE' : '';
+            $lines[] = sprintf(
+                '#%d [%s] %-7s %-28s -> %s%s',
+                $ticket->id,
+                $ticket->status->value,
+                $ticket->priority->name,
+                $ticket->description,
+                $ticket->assignee ?? 'nobody',
+                $flag
+            );
+        }
+        return implode(PHP_EOL, $lines);
+    }
+}
+
+$desk = new TicketDesk();
+$desk->hire(new Technician('Momo', ['keyboard', 'mouse']));
+$desk->hire(new Technician('Professor', ['server', 'screen']));
+
+$morning = new DateTimeImmutable('2026-09-27 09:00');
+$desk->open('Koko', 'Keyboard sticky after lunch', $morning);
+$desk->open('Bobo', 'Screen eaten (partially)', $morning);
+$desk->open('Chip', 'Kitchen has no banana left!', $morning->add(new DateInterval('PT1H')));
+$desk->open('Dale', 'Mouse ran away', $morning);
+$desk->resolve(1, 'Cleaned with warm water. Please eat bananas away from the desk.', $morning->add(new DateInterval('PT2H')));
+
+$afternoon = $morning->add(new DateInterval('PT6H'));
+echo $desk->report($afternoon), PHP_EOL;
+echo count($desk->overdue($afternoon)), ' tickets overdue', PHP_EOL;

@@ -1,0 +1,159 @@
+defmodule Office.TypingPool do
+  @moduledoc """
+  A supervised pool of monkey typists built on GenServer.
+  Work arrives as manuscripts; each monkey types one page at a time and
+  reports back. Crashed monkeys (usually from sugar overload) are restarted.
+  """
+
+  use GenServer
+  require Logger
+
+  @page_size 40
+  @alphabet ~c"abcdefghijklmnopqrstuvwxyz     .,"
+
+  # ------------------------------------------------------------------ client API
+
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
+  end
+
+  def submit(pool \\ __MODULE__, title, pages) when is_integer(pages) and pages > 0 do
+    GenServer.call(pool, {:submit, title, pages})
+  end
+
+  def status(pool \\ __MODULE__) do
+    GenServer.call(pool, :status)
+  end
+
+  def collect(pool \\ __MODULE__, title) do
+    GenServer.call(pool, {:collect, title})
+  end
+
+  # ------------------------------------------------------------------ server
+
+  @impl true
+  def init(opts) do
+    size = Keyword.get(opts, :monkeys, 4)
+    state = %{
+      monkeys: Enum.map(1..size, &spawn_monkey/1),
+      queue: :queue.new(),
+      manuscripts: %{},
+      completed: 0,
+      crashes: 0
+    }
+
+    Process.flag(:trap_exit, true)
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_call({:submit, title, pages}, _from, state) do
+    jobs = for page <- 1..pages, do: {title, page}
+    queue = Enum.reduce(jobs, state.queue, &:queue.in/2)
+    manuscripts = Map.put(state.manuscripts, title, %{pages: pages, done: %{}})
+    state = %{state | queue: queue, manuscripts: manuscripts}
+    {:reply, :ok, dispatch(state)}
+  end
+
+  def handle_call(:status, _from, state) do
+    reply = %{
+      monkeys: length(state.monkeys),
+      queued: :queue.len(state.queue),
+      completed: state.completed,
+      crashes: state.crashes,
+      manuscripts:
+        Map.new(state.manuscripts, fn {title, m} -> {title, "#{map_size(m.done)}/#{m.pages}"} end)
+    }
+
+    {:reply, reply, state}
+  end
+
+  def handle_call({:collect, title}, _from, state) do
+    case Map.fetch(state.manuscripts, title) do
+      {:ok, %{pages: pages, done: done}} when map_size(done) == pages ->
+        text = done |> Enum.sort() |> Enum.map_join("\n", fn {_page, body} -> body end)
+        {:reply, {:ok, text}, %{state | manuscripts: Map.delete(state.manuscripts, title)}}
+
+      {:ok, %{pages: pages, done: done}} ->
+        {:reply, {:error, {:not_ready, map_size(done), pages}}, state}
+
+      :error ->
+        {:reply, {:error, :unknown_manuscript}, state}
+    end
+  end
+
+  @impl true
+  def handle_info({:page_done, monkey, title, page, body}, state) do
+    manuscripts =
+      Map.update!(state.manuscripts, title, fn m -> %{m | done: Map.put(m.done, page, body)} end)
+
+    state = %{state | manuscripts: manuscripts, completed: state.completed + 1}
+    {:noreply, dispatch(%{state | monkeys: [monkey | state.monkeys]})}
+  end
+
+  def handle_info({:EXIT, pid, reason}, state) when reason != :normal do
+    Logger.warning("monkey #{inspect(pid)} crashed: #{inspect(reason)}; hiring a replacement")
+    replacement = spawn_monkey(state.crashes + 100)
+    {:noreply, dispatch(%{state | monkeys: [replacement | state.monkeys], crashes: state.crashes + 1})}
+  end
+
+  def handle_info(_message, state), do: {:noreply, state}
+
+  # ------------------------------------------------------------------ internals
+
+  defp dispatch(%{monkeys: []} = state), do: state
+
+  defp dispatch(%{monkeys: [monkey | rest]} = state) do
+    case :queue.out(state.queue) do
+      {{:value, {title, page}}, queue} ->
+        send(monkey, {:type, self(), title, page})
+        dispatch(%{state | monkeys: rest, queue: queue})
+
+      {:empty, _} ->
+        state
+    end
+  end
+
+  defp spawn_monkey(seed) do
+    spawn_link(fn ->
+      :rand.seed(:exsss, {seed, seed * 7, seed * 13})
+      monkey_loop()
+    end)
+  end
+
+  defp monkey_loop do
+    receive do
+      {:type, pool, title, page} ->
+        if :rand.uniform(50) == 1, do: exit(:too_many_bananas)
+        body = type_page(@page_size)
+        send(pool, {:page_done, self(), title, page, body})
+        monkey_loop()
+    end
+  end
+
+  defp type_page(length) do
+    1..length
+    |> Enum.map(fn _ -> Enum.random(@alphabet) end)
+    |> List.to_string()
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+  end
+end
+
+defmodule Office.Demo do
+  alias Office.TypingPool
+
+  def run do
+    {:ok, _pid} = TypingPool.start_link(monkeys: 6)
+    :ok = TypingPool.submit("war_and_peace_draft", 12)
+    :ok = TypingPool.submit("hamlet_draft", 5)
+
+    Process.sleep(200)
+    IO.inspect(TypingPool.status(), label: "status")
+
+    case TypingPool.collect("hamlet_draft") do
+      {:ok, text} -> IO.puts("Hamlet draft:\n" <> text)
+      {:error, reason} -> IO.inspect(reason, label: "not yet")
+    end
+  end
+end

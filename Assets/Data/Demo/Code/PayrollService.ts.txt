@@ -1,0 +1,164 @@
+// PayrollService.ts
+// Pays every monkey in bananas and dollars, applies bonuses and taxes,
+// and produces the monthly payslips nobody reads.
+
+export type Currency = "USD" | "BANANA";
+
+export interface Employee {
+  id: number;
+  name: string;
+  level: number;
+  hiredAt: Date;
+  linesWritten: number;
+  bugsIntroduced: number;
+  prefersBananas: boolean;
+}
+
+export interface Payslip {
+  employeeId: number;
+  period: string;
+  base: number;
+  bonus: number;
+  penalty: number;
+  tax: number;
+  total: number;
+  currency: Currency;
+  notes: string[];
+}
+
+const BANANA_RATE = 0.25; // one banana is worth a quarter of a dollar
+const TAX_BANDS: Array<[number, number]> = [
+  [1000, 0.0],
+  [5000, 0.1],
+  [20000, 0.2],
+  [Number.POSITIVE_INFINITY, 0.3],
+];
+
+function monthsBetween(from: Date, to: Date): number {
+  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+export class PayrollService {
+  private readonly history = new Map<number, Payslip[]>();
+
+  constructor(private readonly baseSalaryPerLevel = 400) {}
+
+  baseSalary(employee: Employee): number {
+    return this.baseSalaryPerLevel * Math.max(1, employee.level);
+  }
+
+  bonus(employee: Employee): number {
+    // One cent per line of code, capped so nobody writes lines just for money.
+    const linesBonus = Math.min(employee.linesWritten * 0.01, 2000);
+    const loyalty = monthsBetween(employee.hiredAt, new Date()) >= 12 ? 150 : 0;
+    return linesBonus + loyalty;
+  }
+
+  penalty(employee: Employee): number {
+    return employee.bugsIntroduced * 5;
+  }
+
+  tax(amount: number): number {
+    let remaining = amount;
+    let previous = 0;
+    let tax = 0;
+    for (const [limit, rate] of TAX_BANDS) {
+      const slice = Math.min(remaining, limit - previous);
+      if (slice <= 0) break;
+      tax += slice * rate;
+      remaining -= slice;
+      previous = limit;
+    }
+    return tax;
+  }
+
+  pay(employee: Employee, period: string): Payslip {
+    const notes: string[] = [];
+    const base = this.baseSalary(employee);
+    const bonus = this.bonus(employee);
+    const penalty = this.penalty(employee);
+
+    if (penalty > bonus) {
+      notes.push("More bugs than lines. Please read the style guide.");
+    }
+    if (employee.level >= 10) {
+      notes.push("Senior monkey: free coffee for a month.");
+    }
+
+    const gross = Math.max(0, base + bonus - penalty);
+    const tax = this.tax(gross);
+    let total = gross - tax;
+    let currency: Currency = "USD";
+
+    if (employee.prefersBananas) {
+      total = Math.floor(total / BANANA_RATE);
+      currency = "BANANA";
+      notes.push(`Paid in bananas at ${BANANA_RATE} USD each.`);
+    }
+
+    const slip: Payslip = {
+      employeeId: employee.id,
+      period,
+      base: round2(base),
+      bonus: round2(bonus),
+      penalty: round2(penalty),
+      tax: round2(tax),
+      total: round2(total),
+      currency,
+      notes,
+    };
+
+    const list = this.history.get(employee.id) ?? [];
+    list.push(slip);
+    this.history.set(employee.id, list);
+    return slip;
+  }
+
+  payAll(employees: Employee[], period: string): Payslip[] {
+    return employees.map((e) => this.pay(e, period));
+  }
+
+  totalCost(period: string): number {
+    let sum = 0;
+    for (const slips of this.history.values()) {
+      for (const slip of slips) {
+        if (slip.period !== period) continue;
+        sum += slip.currency === "BANANA" ? slip.total * BANANA_RATE : slip.total;
+      }
+    }
+    return round2(sum);
+  }
+
+  format(slip: Payslip): string {
+    const unit = slip.currency === "BANANA" ? "bananas" : "USD";
+    const lines = [
+      `Payslip #${slip.employeeId} for ${slip.period}`,
+      `  base    ${slip.base.toFixed(2)}`,
+      `  bonus   ${slip.bonus.toFixed(2)}`,
+      `  penalty ${slip.penalty.toFixed(2)}`,
+      `  tax     ${slip.tax.toFixed(2)}`,
+      `  total   ${slip.total} ${unit}`,
+      ...slip.notes.map((n) => `  * ${n}`),
+    ];
+    return lines.join("\n");
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+const staff: Employee[] = [
+  { id: 1, name: "Bobo", level: 3, hiredAt: new Date(2024, 1, 10), linesWritten: 12000, bugsIntroduced: 4, prefersBananas: true },
+  { id: 2, name: "Koko", level: 1, hiredAt: new Date(2025, 8, 2), linesWritten: 300, bugsIntroduced: 90, prefersBananas: true },
+  { id: 3, name: "Professor", level: 12, hiredAt: new Date(2020, 3, 15), linesWritten: 250000, bugsIntroduced: 2, prefersBananas: false },
+];
+
+const payroll = new PayrollService();
+const slips = payroll.payAll(staff, "2026-09");
+for (const slip of slips) {
+  console.log(payroll.format(slip));
+}
+console.log(`Total cost this month: ${payroll.totalCost("2026-09")} USD`);

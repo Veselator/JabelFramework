@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# deploy_bananas.sh
+# Ships the latest build of the monkey office software to production.
+# Usage: ./deploy_bananas.sh [--dry-run] [--env staging|production] [--skip-tests]
+
+set -euo pipefail
+
+APP_NAME="thousand-monkeys"
+BUILD_DIR="build"
+ARTIFACT="${APP_NAME}.tar.gz"
+ENVIRONMENT="staging"
+DRY_RUN=0
+SKIP_TESTS=0
+LOG_FILE="deploy_$(date +%Y%m%d_%H%M%S).log"
+MAX_RETRIES=3
+
+declare -A HOSTS=(
+  [staging]="canopy-staging.local"
+  [production]="canopy-01.local canopy-02.local canopy-03.local"
+)
+
+# ------------------------------------------------------------------ helpers
+
+log() {
+  local level="$1"; shift
+  printf '%s [%s] %s\n' "$(date +%H:%M:%S)" "$level" "$*" | tee -a "$LOG_FILE"
+}
+
+die() {
+  log ERROR "$*"
+  exit 1
+}
+
+run() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log DRY "$*"
+  else
+    log RUN "$*"
+    "$@"
+  fi
+}
+
+retry() {
+  local attempt=1
+  until "$@"; do
+    if (( attempt >= MAX_RETRIES )); then
+      return 1
+    fi
+    log WARN "attempt $attempt failed, retrying in $(( attempt * 2 ))s"
+    sleep $(( attempt * 2 ))
+    attempt=$(( attempt + 1 ))
+  done
+}
+
+usage() {
+  sed -n '3,4p' "$0" | sed 's/^# //'
+}
+
+# ------------------------------------------------------------------ arguments
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)    DRY_RUN=1 ;;
+    --skip-tests) SKIP_TESTS=1 ;;
+    --env)        ENVIRONMENT="${2:-}"; shift ;;
+    -h|--help)    usage; exit 0 ;;
+    *)            die "unknown argument: $1" ;;
+  esac
+  shift
+done
+
+[[ -n "${HOSTS[$ENVIRONMENT]:-}" ]] || die "unknown environment '$ENVIRONMENT'"
+
+# ------------------------------------------------------------------ checks
+
+check_tools() {
+  local missing=()
+  for tool in git tar ssh scp; do
+    command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+  done
+  if (( ${#missing[@]} > 0 )); then
+    die "missing tools: ${missing[*]}"
+  fi
+}
+
+check_branch() {
+  local branch
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  if [[ "$ENVIRONMENT" == "production" && "$branch" != "main" ]]; then
+    die "production deploys must come from main (current: $branch)"
+  fi
+  if [[ -n "$(git status --porcelain)" ]]; then
+    die "working tree is dirty; commit or stash first"
+  fi
+  log INFO "branch $branch at $(git rev-parse --short HEAD)"
+}
+
+check_bananas() {
+  # Tradition: never deploy on an empty stomach.
+  local stock="${BANANA_STOCK:-12}"
+  if (( stock < 3 )); then
+    die "only $stock bananas left in the kitchen; refuse to deploy"
+  fi
+  log INFO "banana stock: $stock"
+}
+
+# ------------------------------------------------------------------ steps
+
+run_tests() {
+  if [[ "$SKIP_TESTS" -eq 1 ]]; then
+    log WARN "tests skipped (you monkey)"
+    return
+  fi
+  run ./scripts/test.sh
+}
+
+build() {
+  run rm -rf "$BUILD_DIR"
+  run mkdir -p "$BUILD_DIR"
+  run cp -r src config "$BUILD_DIR"/
+  echo "$(git rev-parse HEAD)" > "$BUILD_DIR/VERSION" || true
+  run tar -czf "$ARTIFACT" -C "$BUILD_DIR" .
+  log INFO "artifact $ARTIFACT ready"
+}
+
+deploy_host() {
+  local host="$1"
+  local remote_dir="/opt/${APP_NAME}/releases/$(date +%s)"
+  log INFO "deploying to $host"
+  retry run scp "$ARTIFACT" "deploy@${host}:/tmp/${ARTIFACT}" || return 1
+  retry run ssh "deploy@${host}" "mkdir -p $remote_dir && tar -xzf /tmp/${ARTIFACT} -C $remote_dir" || return 1
+  run ssh "deploy@${host}" "ln -sfn $remote_dir /opt/${APP_NAME}/current && systemctl restart ${APP_NAME}"
+}
+
+health_check() {
+  local host="$1"
+  local url="http://${host}:8080/health"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log DRY "curl $url"
+    return 0
+  fi
+  retry curl -fsS "$url" >/dev/null
+}
+
+rollback() {
+  local host="$1"
+  log WARN "rolling back $host"
+  run ssh "deploy@${host}" "cd /opt/${APP_NAME}/releases && ln -sfn \$(ls -1 | tail -n 2 | head -n 1) ../current && systemctl restart ${APP_NAME}"
+}
+
+# ------------------------------------------------------------------ main
+
+main() {
+  log INFO "deploying $APP_NAME to $ENVIRONMENT (dry run: $DRY_RUN)"
+  check_tools
+  check_branch
+  check_bananas
+  run_tests
+  build
+
+  local failed=()
+  for host in ${HOSTS[$ENVIRONMENT]}; do
+    if deploy_host "$host" && health_check "$host"; then
+      log INFO "$host is healthy"
+    else
+      failed+=("$host")
+      rollback "$host"
+    fi
+  done
+
+  if (( ${#failed[@]} > 0 )); then
+    die "deploy failed on: ${failed[*]}"
+  fi
+  log INFO "deploy finished. Everybody gets a banana."
+}
+
+main "$@"

@@ -1,0 +1,45 @@
+// Office manager: keeps the monkeys productive (mostly).
+const BANANA_BUDGET = 1000;
+
+class OfficeManager {
+  constructor(name) {
+    this.name = name;
+    this.monkeys = [];
+    this.bananasSpent = 0;
+  }
+
+  hire(monkey) {
+    if (this.monkeys.length >= 1000) {
+      console.warn("Office is full. The theorem is complete.");
+      return false;
+    }
+    this.monkeys.push({ ...monkey, mood: "curious", linesWritten: 0 });
+    return true;
+  }
+
+  async standup() {
+    for (const monkey of this.monkeys) {
+      const report = await monkey.report?.() ?? "ook ook";
+      console.log(`${monkey.name}: ${report}`);
+    }
+  }
+
+  reward(monkey, bananas) {
+    if (this.bananasSpent + bananas > BANANA_BUDGET) {
+      monkey.mood = "grumpy";
+      return;
+    }
+    this.bananasSpent += bananas;
+    monkey.mood = bananas > 5 ? "ecstatic" : "happy";
+  }
+
+  get productivity() {
+    const total = this.monkeys.reduce((sum, m) => sum + m.linesWritten, 0);
+    return this.monkeys.length === 0 ? 0 : total / this.monkeys.length;
+  }
+}
+
+const boss = new OfficeManager("Big Banana");
+boss.hire({ name: "Bobo" });
+boss.hire({ name: "Koko" });
+boss.standup().then(() => console.log(`Average lines: ${boss.productivity}`));
