@@ -126,19 +126,23 @@ namespace Jabel.Scripting.Blocks
     }
 
     [Serializable]
-    [JabelBlock("Feedback/Play sound", "#C29B2E")]
+    [JabelBlock("Feedback/Play sound", "#C29B2E", Help = "Plays a Sound Cue (random variation and pitch) or a single clip.")]
     public class PlaySoundBlock : JabelBlock
     {
+        public Jabel.Audio.SoundCue cue;
+        [Tooltip("Used when no cue is set.")]
         public AudioClip clip;
         [Range(0, 1)] public float volume = 1;
 
         public override BlockResult Execute(JabelContext context)
         {
-            if (clip != null && !context.IsOffline) context.Runtime.PlaySound(clip, volume);
+            if (context.IsOffline) return BlockResult.Continue;
+            if (cue != null) Jabel.Audio.JabelAudio.Play(cue);
+            else if (clip != null) context.Runtime.PlaySound(clip, volume);
             return BlockResult.Continue;
         }
 
-        public override string Describe() => "play " + (clip != null ? clip.name : "<none>");
+        public override string Describe() => "play " + (cue != null ? cue.name : clip != null ? clip.name : "<none>");
     }
 
     [Serializable]

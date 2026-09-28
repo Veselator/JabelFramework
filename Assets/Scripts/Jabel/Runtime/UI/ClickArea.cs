@@ -1,3 +1,4 @@
+using Jabel.Audio;
 using Jabel.Core;
 using Jabel.Numbers;
 using Jabel.Scripting;
@@ -34,6 +35,8 @@ namespace Jabel.UI
         [Tooltip("Optional script replacing ClickerConfig.onClick for this area.")]
         [SerializeField] private JabelScript overrideScript = new JabelScript();
         [SerializeField] private float punch = 0.06f;
+        [Tooltip("Played on every processed click (random variation and pitch).")]
+        [SerializeField] private SoundCue clickSound;
         [SerializeField] private UnityEvent onClicked = new UnityEvent();
 
         private IClickFeedback[] _feedbacks;
@@ -79,6 +82,7 @@ namespace Jabel.UI
             }
 
             var result = Manager.Click(world, eventData.position, this, overrideScript);
+            JabelAudio.Play(clickSound);
             float strength = result.IsCritical ? punch * 2.5f : punch;
             // ButtonJuice owns the scale when present; otherwise punch ourselves.
             if (_juice != null) _juice.Pop(strength);

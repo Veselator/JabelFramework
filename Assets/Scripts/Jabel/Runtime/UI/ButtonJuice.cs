@@ -1,3 +1,4 @@
+using Jabel.Audio;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -11,7 +12,7 @@ namespace Jabel.UI
     /// </summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("Jabel/UI/Button Juice")]
-    public class ButtonJuice : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
+    public class ButtonJuice : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler
     {
         [SerializeField] private float hoverScale = 1.07f;
         [SerializeField] private float pressScale = 0.92f;
@@ -24,6 +25,12 @@ namespace Jabel.UI
         [Tooltip("Gentle breathing when available, to attract attention.")]
         [SerializeField] private bool pulseWhenAvailable;
 
+        [Header("Sound")]
+        [Tooltip("Played on click. Empty = the default UI click of JabelAudio (only for Buttons).")]
+        [SerializeField] private SoundCue clickSound;
+        [Tooltip("Off for elements that play their own action sounds (shop items, click areas).")]
+        [SerializeField] private bool playClickSound = true;
+
         private Vector3 _baseScale = Vector3.one;
         private Color _baseColor = Color.white;
         private bool _hover, _pressed, _available = true;
@@ -32,6 +39,7 @@ namespace Jabel.UI
         private float _shakeTime = 1;
         private Punch _punch;
         private float _pulsePhase;
+        private Selectable _selectable;
 
         public bool Available => _available;
 
@@ -41,6 +49,7 @@ namespace Jabel.UI
             if (tintTarget == null) tintTarget = GetComponent<Graphic>();
             if (tintTarget != null) _baseColor = tintTarget.color;
             _pulsePhase = Random.value * 10;
+            _selectable = GetComponent<Selectable>();
         }
 
         private void OnDisable()
@@ -62,6 +71,15 @@ namespace Jabel.UI
         public void OnPointerExit(PointerEventData eventData) { _hover = false; _pressed = false; }
         public void OnPointerDown(PointerEventData eventData) => _pressed = true;
         public void OnPointerUp(PointerEventData eventData) => _pressed = false;
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (!playClickSound || eventData.button != PointerEventData.InputButton.Left) return;
+            if (_selectable != null && !_selectable.IsInteractable()) return;
+            // Plain graphics (no Selectable) only click when a sound was assigned explicitly.
+            var cue = clickSound != null ? clickSound : (_selectable != null ? JabelAudio.DefaultClick : null);
+            JabelAudio.Play(cue);
+        }
 
         private void Update()
         {

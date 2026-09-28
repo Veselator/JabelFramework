@@ -183,6 +183,50 @@ namespace Jabel.Editor
             return button;
         }
 
+        /// <summary>Horizontal 0..1 slider: rounded track, colored fill and a round knob.</summary>
+        public static Slider CreateSlider(Transform parent, string name, Vector2 size, Color trackColor, Color fillColor, Color knobColor)
+        {
+            var rounded = JabelEditorUtility.RoundedRectSprite();
+            var root = CreateRect(name, parent);
+            root.sizeDelta = size;
+            float knob = size.y;
+            float trackInset = size.y * 0.3f;
+
+            var track = CreateImage(root, "Track", rounded, trackColor, sliced: true);
+            Stretch(track.rectTransform, 0, 0, trackInset, trackInset);
+            track.pixelsPerUnitMultiplier = 3f;
+            track.raycastTarget = true;
+
+            var fillArea = CreateRect("Fill Area", root);
+            // Insets chosen so the fill starts at the track's left edge and ends under the knob centre.
+            Stretch(fillArea, knob * 0.25f, knob * 0.75f, trackInset, trackInset);
+            var fill = CreateImage(fillArea, "Fill", rounded, fillColor, sliced: true);
+            fill.pixelsPerUnitMultiplier = 3f;
+            Stretch(fill.rectTransform);
+            fill.rectTransform.sizeDelta = new Vector2(knob * 0.5f, 0);
+
+            var handleArea = CreateRect("Handle Slide Area", root);
+            Stretch(handleArea, knob * 0.5f, knob * 0.5f, 0, 0);
+            var handle = CreateImage(handleArea, "Handle", JabelEditorUtility.CircleSprite(), knobColor);
+            handle.raycastTarget = true;
+            handle.rectTransform.anchorMin = new Vector2(0, 0);
+            handle.rectTransform.anchorMax = new Vector2(0, 1);
+            handle.rectTransform.sizeDelta = new Vector2(knob, 0);
+
+            var slider = root.gameObject.AddComponent<Slider>();
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = 0;
+            slider.maxValue = 1;
+            var colors = slider.colors;
+            colors.highlightedColor = new Color(1f, 1f, 0.85f);
+            colors.pressedColor = new Color(0.85f, 0.85f, 0.85f);
+            slider.colors = colors;
+            return slider;
+        }
+
         /// <summary>Vertical scroll list. Returns the content rect (children are laid out automatically).</summary>
         public static RectTransform CreateVerticalScroll(Transform parent, string name, float spacing = 10, int padding = 10)
         {

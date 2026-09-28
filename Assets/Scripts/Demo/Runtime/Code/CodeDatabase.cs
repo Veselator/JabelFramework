@@ -53,7 +53,13 @@ namespace OneKMonkeys
         public double TotalLines { get; private set; }
 
         /// <summary>Spaces, tabs, newlines and punctuation are typed instantly and for free.</summary>
-        public static bool IsFree(char c) => char.IsWhiteSpace(c) || char.IsPunctuation(c);
+        /// <summary>
+        /// Free characters cost nothing and are written together with the paid character before them.
+        /// Brackets are never free: they carry the structure of the code.
+        /// </summary>
+        public static bool IsFree(char c) => (char.IsWhiteSpace(c) || char.IsPunctuation(c)) && !IsBracket(c);
+
+        public static bool IsBracket(char c) => c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}';
 
         private void OnEnable() => _pages = null;
 

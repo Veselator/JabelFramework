@@ -102,14 +102,20 @@ namespace Jabel.Localization
         }
 
         /// <summary>Cycles through available languages (for a simple language button).</summary>
-        public static void NextLanguage()
+        public static void NextLanguage() => StepLanguage(1);
+
+        public static void PreviousLanguage() => StepLanguage(-1);
+
+        /// <summary>Moves <paramref name="step"/> languages forward (negative = back), wrapping around.</summary>
+        public static void StepLanguage(int step)
         {
             var list = Languages;
             if (list.Count == 0) return;
             int index = 0;
             for (int i = 0; i < list.Count; i++)
                 if (string.Equals(list[i].code, CurrentLanguage, StringComparison.OrdinalIgnoreCase)) index = i;
-            SetLanguage(list[(index + 1) % list.Count].code);
+            int next = ((index + step) % list.Count + list.Count) % list.Count;
+            SetLanguage(list[next].code);
         }
 
         public static bool Has(string key) => _service != null && _service.Has(key);

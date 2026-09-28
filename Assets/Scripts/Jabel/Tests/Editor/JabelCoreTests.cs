@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Jabel.Audio;
 using Jabel.Buffs;
 using Jabel.Localization;
 using Jabel.Numbers;
@@ -154,6 +155,59 @@ namespace Jabel.Tests
             var rows = CsvParser.Parse("key,en\nhello,\"Hello, \"\"world\"\"\"\n");
             Assert.AreEqual(2, rows.Count);
             Assert.AreEqual("Hello, \"world\"", rows[1][1]);
+        }
+
+        // ------------------------------------------------------------ Audio
+
+        [Test]
+        public void SoundCue_RandomVariationPitchAndNoRepeat()
+        {
+            var cue = UnityEngine.ScriptableObject.CreateInstance<SoundCue>();
+            var clips = new UnityEngine.AudioClip[3];
+            for (int i = 0; i < clips.Length; i++) clips[i] = UnityEngine.AudioClip.Create("c" + i, 100, 1, 44100, false);
+            cue.clips = clips;
+            cue.minInterval = 0;
+            try
+            {
+                var used = new HashSet<UnityEngine.AudioClip>();
+                UnityEngine.AudioClip previous = null;
+                for (int i = 0; i < 200; i++)
+                {
+                    Assert.IsTrue(cue.TryNext(i, out var clip, out float pitch, out _));
+                    Assert.AreNotSame(previous, clip, "same variation twice in a row");
+                    Assert.That(pitch, Is.InRange(0.8f, 1.2f));
+                    used.Add(clip);
+                    previous = clip;
+                }
+                Assert.AreEqual(3, used.Count);
+            }
+            finally
+            {
+                foreach (var clip in clips) UnityEngine.Object.DestroyImmediate(clip);
+                UnityEngine.Object.DestroyImmediate(cue);
+            }
+        }
+
+        [Test]
+        public void SoundCue_ThrottlesBursts()
+        {
+            var cue = UnityEngine.ScriptableObject.CreateInstance<SoundCue>();
+            var clip = UnityEngine.AudioClip.Create("c", 100, 1, 44100, false);
+            cue.clips = new[] { clip };
+            cue.minInterval = 0.05f;
+            try
+            {
+                Assert.IsTrue(cue.TryNext(10f, out _, out _, out _));
+                Assert.IsFalse(cue.TryNext(10.02f, out _, out _, out _));
+                Assert.IsTrue(cue.TryNext(10.06f, out _, out _, out _));
+                // A new play session restarts time: must not stay throttled.
+                Assert.IsTrue(cue.TryNext(0.5f, out _, out _, out _));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(clip);
+                UnityEngine.Object.DestroyImmediate(cue);
+            }
         }
     }
 }

@@ -27,7 +27,6 @@ namespace Jabel.Core
         [SerializeField] private ClickerConfig config;
         [Tooltip("Load the save on start. Disable to always start fresh (useful while balancing).")]
         [SerializeField] private bool loadSave = true;
-        [SerializeField] private AudioSource audioSource;
 
         public static ClickerManager Instance { get; private set; }
 
@@ -92,11 +91,6 @@ namespace Jabel.Core
             Buffs = new BuffSystem(this, Events, config.AllBuffs);
             Save = new SaveSystem(CreateStorage(config.storage), config.saveSlot);
 
-            if (audioSource == null)
-            {
-                audioSource = gameObject.AddComponent<AudioSource>();
-                audioSource.playOnAwake = false;
-            }
         }
 
         private void Start()
@@ -374,7 +368,7 @@ namespace Jabel.Core
 
         public void PlaySound(AudioClip clip, float volume)
         {
-            if (clip != null && audioSource != null) audioSource.PlayOneShot(clip, volume);
+            Jabel.Audio.JabelAudio.PlayClip(clip, volume);
         }
 
         public void RequestSave() => SaveNow();

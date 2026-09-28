@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Jabel.Audio;
 using Jabel.Core;
 using Jabel.Editor;
 using Jabel.Events;
@@ -57,6 +58,7 @@ namespace OneKMonkeys.Editor
         // Particle systems must not live under a canvas: the canvas scale would shrink them to nothing.
         private static Transform _particles;
         private static bool _fromScratch;
+        private static DemoAudio.Cues _cues;
 
         /// <summary>
         /// Default: creates the scene if missing, otherwise UPDATES it — objects that already exist in the scene
@@ -108,6 +110,7 @@ namespace OneKMonkeys.Editor
             PlayerSettings.productName = "1000 Monkeys";
             var sprites = PrepareSprites();
             var data = DemoData.Create(sprites, overwrite: _fromScratch);
+            _cues = DemoAudio.Create(overwrite: _fromScratch);
 
             var monkeyMaterial = CreateMonkeyMaterial();
             var dot = JabelEditorUtility.SoftDotSprite();
@@ -126,9 +129,13 @@ namespace OneKMonkeys.Editor
             var report = JabelSceneMerger.BuildOrUpdate(ScenePath, () => Populate(sprites, data, monkeyMaterial, dot, dotMaterial,
                 sheetMaterial, worldTextPrefab, stationPrefab, shopItem), _fromScratch);
 
+            // Additions to objects that already existed (settings menu, sound wiring) — never overwrites manual choices.
+            var upgrades = DemoSceneUpgrade.Apply(_cues, SettingsStyle(sprites), shopItem);
+            EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
+
             ClickerSceneBuilder.AddSceneToBuild(ScenePath);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[1000 Monkeys] Demo scene {ScenePath}: {report}");
+            Debug.Log($"[1000 Monkeys] Demo scene {ScenePath}: {report}; {upgrades}");
         }
 
         private static T ExistingPrefab<T>(string path) where T : Component
@@ -159,6 +166,9 @@ namespace OneKMonkeys.Editor
 
             JabelUIFactory.EnsureEventSystem();
             _particles = new GameObject("Particles").transform;
+
+            // Music + pooled sound effects; volumes come from the settings menu.
+            new GameObject("Audio").AddComponent<JabelAudio>().EditorSetup(_cues.Music, DemoAudio.MusicVolume, _cues.UiClick);
 
             var managerGo = new GameObject("ClickerManager");
             var manager = managerGo.AddComponent<ClickerManager>();
@@ -707,9 +717,6 @@ namespace OneKMonkeys.Editor
             JabelEditorUtility.Set(upgrade.GetComponent<ButtonJuice>(), "pulseWhenAvailable", true);
             UnityEventTools.AddPersistentListener(upgrade.onClick, slide.Toggle);
 
-            var language = JabelUIFactory.CreateButton(bar.transform, "LanguageButton", "EN", rounded, new Color(0.3f, 0.33f, 0.45f), new Vector2(96, 90), 32);
-            JabelUIFactory.Place((RectTransform)language.transform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-138, 0), new Vector2(96, 90));
-            JabelEditorUtility.Set(language.gameObject.AddComponent<LanguageButton>(), "label", language.GetComponentInChildren<TMP_Text>());
 
             var exit = JabelUIFactory.CreateButton(bar.transform, "ExitButton", "X", rounded, new Color(0.7f, 0.25f, 0.25f), new Vector2(96, 90), 44);
             JabelUIFactory.Place((RectTransform)exit.transform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-26, 0), new Vector2(96, 90));
@@ -763,6 +770,12 @@ namespace OneKMonkeys.Editor
             ClickerSceneBuilder.CreateToasts(hud, rounded);
             ClickerSceneBuilder.CreateOfflinePopup(hud, rounded);
 
+            // Settings (language + volumes): gear button in the top bar, popup above everything else.
+            var style = SettingsStyle(sprites);
+            var settingsPopup = SettingsMenuFactory.CreatePopup(hud, style, DemoSceneUpgrade.SettingsSounds(_cues));
+            var settings = SettingsMenuFactory.CreateButton(bar.transform, settingsPopup, style, new Vector2(96, 90), _cues.Panel);
+            JabelUIFactory.Place((RectTransform)settings.transform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-138, 0), new Vector2(96, 90));
+
             // Level-up confetti, triggered by the "LevelUp" function called from JabelScript.
             var confetti = JabelUIFactory.CreateBurstParticles(camera.transform, "LevelUpConfetti", dotMaterial,
                 Gradient2(new Color(1f, 0.85f, 0.3f), new Color(0.4f, 0.8f, 1f)), 3, 9, 0.08f, 0.2f, 1.6f, 1.2f, OrderHudParticles);
@@ -779,6 +792,15 @@ namespace OneKMonkeys.Editor
 
             return tooltip;
         }
+
+        public static SettingsMenuFactory.Style SettingsStyle(IDictionary<string, Sprite> sprites) => new SettingsMenuFactory.Style
+        {
+            PanelSprite = sprites[PanelSprite],
+            PanelColor = PanelColor,
+            ButtonColor = new Color(0.3f, 0.33f, 0.45f),
+            AccentColor = new Color(0.35f, 0.85f, 0.45f),
+            TitleColor = new Color(1f, 0.88f, 0.45f)
+        };
 
         /// <summary>
         /// Puts blinking eyes on a UI image of the monkey body (the body sprite has none of its own).

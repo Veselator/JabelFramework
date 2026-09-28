@@ -115,6 +115,8 @@ namespace OneKMonkeys.Editor
                         new LanguageInfo { code = "en", nativeName = "English", systemLanguages = new List<SystemLanguage> { SystemLanguage.English } },
                         new LanguageInfo { code = "ru", nativeName = "Русский", systemLanguages = new List<SystemLanguage> { SystemLanguage.Russian, SystemLanguage.Belarusian, SystemLanguage.Ukrainian } }
                     }, "en", requiredTables);
+                // The game always starts in English; players switch in the settings menu (their choice is remembered).
+                JabelEditorUtility.Set(loc, "detectSystemLanguage", false);
             }
             else
             {

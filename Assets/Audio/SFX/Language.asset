@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2e90fba1e155b0418fac07b67944832, type: 3}
+  m_Name: Language
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Audio.SoundCue
+  clips:
+  - {fileID: 8300000, guid: f40ab1ddf4653394d9341e0ff902ee12, type: 3}
+  - {fileID: 8300000, guid: abd24d488c08526499f4c381169b01dc, type: 3}
+  - {fileID: 8300000, guid: 2d01860a0883f394db11f6db22d15f16, type: 3}
+  - {fileID: 8300000, guid: 1a932d9bbc8b64849832280e79c74c7f, type: 3}
+  - {fileID: 8300000, guid: 7e90d1f63f663d046a6ac43626902c36, type: 3}
+  - {fileID: 8300000, guid: b2d01ee5835c598438d9589c3b140036, type: 3}
+  - {fileID: 8300000, guid: 8ab806cdedda4df43bc4722b8b620ef2, type: 3}
+  - {fileID: 8300000, guid: 15c58bb2b1c10a841a3b9000021b595e, type: 3}
+  - {fileID: 8300000, guid: 26198fd28c053a741b1963258da017f0, type: 3}
+  - {fileID: 8300000, guid: d8c558088a1b96844ad8bcdf0fde7467, type: 3}
+  - {fileID: 8300000, guid: 6f69ff55be7be614bb3414009ae7721b, type: 3}
+  - {fileID: 8300000, guid: 1e0e11db0893dd94c9e3c60c7f3b256e, type: 3}
+  - {fileID: 8300000, guid: ab47120f495c48b44a4faeb61c5b7246, type: 3}
+  volume: 0.8
+  pitch: {x: 0.8, y: 1.2}
+  volumeVariation: 0
+  channel: 2
+  avoidRepeat: 1
+  minInterval: 0.03
+  maxVoices: 4

@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2e90fba1e155b0418fac07b67944832, type: 3}
+  m_Name: Denied
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Audio.SoundCue
+  clips:
+  - {fileID: 8300000, guid: fafc530fdc2c78243971909803036eaf, type: 3}
+  - {fileID: 8300000, guid: 25d1a790168befc4f8874ec922b4b476, type: 3}
+  - {fileID: 8300000, guid: 0ea7ec707d315ce45a70711f725cf65a, type: 3}
+  - {fileID: 8300000, guid: be66630a738f2774aa0a52e3a31a51d2, type: 3}
+  - {fileID: 8300000, guid: 8262db953cda86a4795ca7af0036e369, type: 3}
+  volume: 0.9
+  pitch: {x: 0.8, y: 1.2}
+  volumeVariation: 0
+  channel: 2
+  avoidRepeat: 1
+  minInterval: 0.03
+  maxVoices: 4

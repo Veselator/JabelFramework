@@ -1,3 +1,4 @@
+using Jabel.Audio;
 using Jabel.Core;
 using Jabel.UI;
 using UnityEngine;
@@ -13,6 +14,7 @@ namespace OneKMonkeys
         [SerializeField] private Transform visualRoot;
         [SerializeField] private SpriteRenderer screenGlow;
         [SerializeField] private Transform label;
+        [SerializeField] private SoundCue openSound;
 
         private Vector3 _baseScale, _labelBase;
         private float _scale = 1;
@@ -40,6 +42,7 @@ namespace OneKMonkeys
         {
             if (CameraScroller.Instance != null && CameraScroller.Instance.WasDragged) return;
             _punch.Kick(0.15f);
+            JabelAudio.Play(openSound);
             if (navigator != null) navigator.OpenClicker();
         }
 

@@ -153,6 +153,70 @@ namespace Jabel.Editor
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
+        /// <summary>Anti-aliased filled circle (slider knobs, dots). Generated once.</summary>
+        public static Sprite CircleSprite()
+        {
+            string path = GeneratedArtFolder + "/Circle.png";
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (sprite != null) return sprite;
+
+            EnsureFolder(GeneratedArtFolder);
+            const int size = 64;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            float r = size * 0.5f - 1;
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(size * 0.5f, size * 0.5f));
+                tex.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(r - d + 0.5f)));
+            }
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+            ConfigureSpriteImporter(path, 100);
+            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        }
+
+        /// <summary>Settings gear icon: toothed ring with a hole, anti-aliased (4x supersampled). Generated once.</summary>
+        public static Sprite GearSprite()
+        {
+            string path = GeneratedArtFolder + "/Gear.png";
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (sprite != null) return sprite;
+
+            EnsureFolder(GeneratedArtFolder);
+            const int size = 128;
+            const int teeth = 8;
+            const int samples = 4;
+            float c = size * 0.5f;
+            float outer = size * 0.47f, body = size * 0.36f, hole = size * 0.15f;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                int inside = 0;
+                for (int sy = 0; sy < samples; sy++)
+                for (int sx = 0; sx < samples; sx++)
+                {
+                    float px = x + (sx + 0.5f) / samples - c, py = y + (sy + 0.5f) / samples - c;
+                    float d = Mathf.Sqrt(px * px + py * py);
+                    if (d < hole) continue;
+                    // Trapezoid teeth: wide at the body, narrower at the tip.
+                    float angle = Mathf.Atan2(py, px) * teeth / (2 * Mathf.PI);
+                    float phase = Mathf.Abs(angle - Mathf.Round(angle)); // 0 at a tooth centre, 0.5 between teeth
+                    float toothHalf = Mathf.Lerp(0.26f, 0.18f, Mathf.InverseLerp(body, outer, d));
+                    bool solid = d <= body || (d <= outer && phase <= toothHalf);
+                    if (solid) inside++;
+                }
+                tex.SetPixel(x, y, new Color(1, 1, 1, inside / (float)(samples * samples)));
+            }
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+            ConfigureSpriteImporter(path, 100);
+            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        }
+
         private static void ConfigureSpriteImporter(string path, float ppu, Vector4 border = default)
         {
             var importer = (TextureImporter)AssetImporter.GetAtPath(path);

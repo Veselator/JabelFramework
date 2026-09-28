@@ -24,7 +24,7 @@ MonoBehaviour:
     fontOverride: {fileID: 0}
     systemLanguages: 1e0000000300000026000000
   defaultLanguage: en
-  detectSystemLanguage: 1
+  detectSystemLanguage: 0
   tables:
   - {fileID: 4900000, guid: a0282d7ee34dbea4db072b2c9e629de7, type: 3}
   - {fileID: 4900000, guid: 5cec0aacf668d354e9ea6922f07ddb8d, type: 3}

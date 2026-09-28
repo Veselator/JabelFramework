@@ -7,9 +7,9 @@ using UnityEngine;
 namespace OneKMonkeys
 {
     /// <summary>
-    /// Renders the shared program on a monitor: new characters fly in and fade (digits and letters),
-    /// whitespace and punctuation appear instantly, lines scroll up smoothly behind a mask,
-    /// and a tiny tokenizer adds syntax colors. Only a window of recent lines is kept in the mesh.
+    /// Renders the shared program on a monitor: new characters slide up and fade in,
+    /// free characters (whitespace, punctuation) appear together with the character typed before them,
+    /// lines scroll up smoothly behind a mask, and a tiny tokenizer adds syntax colors. Only a window of recent lines is kept in the mesh.
     /// </summary>
     [AddComponentMenu("1000 Monkeys/Code Screen View")]
     public class CodeScreenView : JabelBehaviour
@@ -143,13 +143,20 @@ namespace OneKMonkeys
                     float start = Mathf.Max(now, _nextReveal);
                     // Cap the reveal so big writes never queue up behind the typing animation.
                     float step = Mathf.Min(stagger, maxRevealTime / Mathf.Max(1, fresh.Length));
+                    // Free characters (spaces, punctuation) appear together with the typed character before them.
+                    float previous = _appear.Count > 0 ? _appear[_appear.Count - 1] : now;
                     for (int i = 0; i < fresh.Length; i++)
                     {
                         char c = fresh[i];
                         _buffer.Append(c);
-                        bool instant = CodeDatabase.IsFree(c);
-                        _appear.Add(instant ? now - charAnimTime : start);
-                        if (!instant) start += step;
+                        if (CodeDatabase.IsFree(c))
+                        {
+                            _appear.Add(previous);
+                            continue;
+                        }
+                        _appear.Add(start);
+                        previous = start;
+                        start += step;
                     }
                     _nextReveal = Mathf.Min(start, now + maxRevealTime);
                     _shownStream = writer.StreamPosition;

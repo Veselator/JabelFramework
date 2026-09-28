@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2e90fba1e155b0418fac07b67944832, type: 3}
+  m_Name: MonkeyUpgrade
+  m_EditorClassIdentifier: Jabel.Runtime::Jabel.Audio.SoundCue
+  clips:
+  - {fileID: 8300000, guid: 377682ab8015a0b44bc9b75f0431e45f, type: 3}
+  - {fileID: 8300000, guid: 66c3d2d771c27da488f0ac5803df6c14, type: 3}
+  - {fileID: 8300000, guid: 81be555c5c25b5540be579852824615b, type: 3}
+  - {fileID: 8300000, guid: 9b15d15095e01eb4393ea27fabed212b, type: 3}
+  - {fileID: 8300000, guid: 67d935e11c808104580cb83a19396914, type: 3}
+  - {fileID: 8300000, guid: 66aedb39f44ef604388d2e97e9510d94, type: 3}
+  - {fileID: 8300000, guid: d6d62247833665d4a914a3b784928752, type: 3}
+  - {fileID: 8300000, guid: b3cbe2e7b79d8764282dd73da7ee3e15, type: 3}
+  - {fileID: 8300000, guid: 41c726dddee22634283f1a644130ec99, type: 3}
+  - {fileID: 8300000, guid: 88b5330e70adfd444b3f0315a38fa22e, type: 3}
+  - {fileID: 8300000, guid: 519ff898de01ef4499b2533b363645bd, type: 3}
+  - {fileID: 8300000, guid: b5d6812d0d765b04297952ea12305eed, type: 3}
+  - {fileID: 8300000, guid: 4495251833f6b1c46aaa5878d45344ba, type: 3}
+  - {fileID: 8300000, guid: 44e40f49c19193046988459e71f3f830, type: 3}
+  volume: 0.9
+  pitch: {x: 0.8, y: 1.2}
+  volumeVariation: 0
+  channel: 2
+  avoidRepeat: 1
+  minInterval: 0.03
+  maxVoices: 4

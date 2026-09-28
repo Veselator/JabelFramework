@@ -170,6 +170,8 @@ MonoBehaviour:
   hoverTint: {r: 1.1, g: 1.1, b: 1.1, a: 1}
   unavailableTint: {r: 0.6, g: 0.6, b: 0.65, a: 1}
   pulseWhenAvailable: 0
+  clickSound: {fileID: 0}
+  playClickSound: 0
 --- !u!225 &1608898158083613703
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -203,6 +205,8 @@ MonoBehaviour:
   button: {fileID: 1872838763588943201}
   juice: {fileID: 1662525068902500908}
   group: {fileID: 1608898158083613703}
+  buySound: {fileID: 11400000, guid: 830dd6d740b2d4d4d86ac55aba3ce99f, type: 2}
+  failSound: {fileID: 11400000, guid: a11a66b1ca004df488651ca27ee908c2, type: 2}
   affordableColor: {r: 0.55, g: 1, b: 0.55, a: 1}
   expensiveColor: {r: 1, g: 0.45, b: 0.45, a: 1}
   lockedColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}

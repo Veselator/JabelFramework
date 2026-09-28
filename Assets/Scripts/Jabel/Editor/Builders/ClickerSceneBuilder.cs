@@ -283,13 +283,14 @@ namespace Jabel.Editor
             reset.GetComponentInChildren<TMP_Text>().gameObject.AddComponent<LocalizedText>().Text = "tpl.reset";
             UnityEventTools.AddPersistentListener(reset.onClick, manager.DeleteSaveAndRestart);
 
-            var language = JabelUIFactory.CreateButton(root, "LanguageButton", "EN", rounded, new Color(0.3f, 0.35f, 0.5f), new Vector2(110, 70));
-            JabelUIFactory.Place((RectTransform)language.transform, Vector2.zero, Vector2.zero, new Vector2(510, 30), new Vector2(110, 70));
-            var langButton = language.gameObject.AddComponent<LanguageButton>();
-            JabelEditorUtility.Set(langButton, "label", language.GetComponentInChildren<TMP_Text>());
-
             CreateToasts(root, rounded);
             CreateOfflinePopup(root, rounded);
+
+            // Settings: language + volumes (popup drawn above everything else).
+            var popup = SettingsMenuFactory.CreatePopup(root, SettingsMenuFactory.Style.Default, default);
+            var settings = SettingsMenuFactory.CreateButton(root, popup, SettingsMenuFactory.Style.Default, new Vector2(90, 70));
+            JabelUIFactory.Place((RectTransform)settings.transform, Vector2.zero, Vector2.zero, new Vector2(510, 30), new Vector2(90, 70));
+            settings.transform.SetSiblingIndex(popup.transform.GetSiblingIndex());
         }
 
         /// <summary>Stretches horizontally with margins and sits in a band measured from the top edge.</summary>

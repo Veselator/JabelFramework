@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Jabel.Audio;
 using Jabel.Buffs;
 using Jabel.Core;
 using Jabel.Events;
@@ -31,6 +32,8 @@ namespace OneKMonkeys
         [SerializeField] private FloatingTextSpawner floatingTexts;
         [SerializeField] private ParticleSystem levelUpParticles;
         [SerializeField] private MonkeyTooltip tooltip;
+        [SerializeField] private SoundCue upgradeSound;
+        [SerializeField] private SoundCue deniedSound;
         [SerializeField] private Color charsColor = new Color(0.6f, 1f, 0.6f);
         [SerializeField] private Color moneyColor = new Color(1f, 0.88f, 0.35f);
 
@@ -136,8 +139,13 @@ namespace OneKMonkeys
             if (Manager.Buffs.TryLevelUp(station.Instance))
             {
                 if (tooltip != null) tooltip.Pulse();
+                JabelAudio.Play(upgradeSound);
             }
-            else station.PlayDenied();
+            else
+            {
+                station.PlayDenied();
+                JabelAudio.Play(deniedSound);
+            }
             if (tooltip != null && station.IsHovered) tooltip.Show(station);
         }
 

@@ -1,3 +1,4 @@
+using Jabel.Audio;
 using Jabel.Buffs;
 using Jabel.Core;
 using Jabel.Localization;
@@ -25,6 +26,8 @@ namespace OneKMonkeys
         [SerializeField] private Color expensiveButton = new Color(0.5f, 0.5f, 0.55f);
         [SerializeField] private Color affordablePrice = new Color(0.75f, 1f, 0.75f);
         [SerializeField] private Color expensivePrice = new Color(1f, 0.45f, 0.45f);
+        [SerializeField] private SoundCue hireSound;
+        [SerializeField] private SoundCue deniedSound;
 
         private bool _hover;
         private float _scale = 1;
@@ -57,8 +60,16 @@ namespace OneKMonkeys
         {
             if (!IsBound) return;
             if (CameraScroller.Instance != null && CameraScroller.Instance.WasDragged) return;
-            if (Manager.Buffs.TryBuy(monkeyBuff) > 0) _punch.Kick(0.3f);
-            else _shake = 0;
+            if (Manager.Buffs.TryBuy(monkeyBuff) > 0)
+            {
+                _punch.Kick(0.3f);
+                JabelAudio.Play(hireSound);
+            }
+            else
+            {
+                _shake = 0;
+                JabelAudio.Play(deniedSound);
+            }
         }
 
         public void OnPointerEnter(PointerEventData eventData) => _hover = true;

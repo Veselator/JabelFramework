@@ -1,3 +1,4 @@
+using Jabel.Audio;
 using Jabel.Buffs;
 using Jabel.Core;
 using Jabel.Localization;
@@ -21,6 +22,8 @@ namespace Jabel.UI
         [SerializeField] private Button button;
         [SerializeField] private ButtonJuice juice;
         [SerializeField] private CanvasGroup group;
+        [SerializeField] private SoundCue buySound;
+        [SerializeField] private SoundCue failSound;
         [SerializeField] private Color affordableColor = new Color(0.55f, 1f, 0.55f);
         [SerializeField] private Color expensiveColor = new Color(1f, 0.45f, 0.45f);
         [SerializeField] private Color lockedColor = new Color(0.8f, 0.8f, 0.8f);
@@ -129,8 +132,13 @@ namespace Jabel.UI
             if (bought > 0)
             {
                 if (juice != null) juice.Pop();
+                JabelAudio.Play(buySound);
             }
-            else if (juice != null) juice.Shake();
+            else
+            {
+                if (juice != null) juice.Shake();
+                JabelAudio.Play(failSound);
+            }
             Refresh();
         }
 

@@ -9,6 +9,12 @@ jabel.offline.title,While you were away ({0}),Пока вас не было ({0}
 jabel.offline.nothing,Nothing happened. Hire someone to work for you!,Ничего не произошло. Наймите кого-нибудь!
 jabel.offline.capped,Only {0} counted. Upgrade to extend offline time.,Засчитано только {0}. Улучшения увеличат лимит.
 jabel.offline.collect,Collect,Забрать
+jabel.settings.title,Settings,Настройки
+jabel.settings.language,Language,Язык
+jabel.settings.master,Master volume,Общая громкость
+jabel.settings.music,Music,Музыка
+jabel.settings.sfx,Sound effects,Эффекты
+jabel.settings.close,OK,ОК
 jabel.saved,Game saved,Игра сохранена
 time.d,d,д
 time.h,h,ч
